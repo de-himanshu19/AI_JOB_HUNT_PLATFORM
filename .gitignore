@@ -1,0 +1,30 @@
+# Legacy projects remain locally available to Codex
+existing_projects/
+
+# Secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+**/telegram.txt
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Databases and generated data
+*.db
+*.sqlite
+*.sqlite3
+*.log
+outputs/
+reports/
+exports/
+data/*.db
+data/*.sqlite*
