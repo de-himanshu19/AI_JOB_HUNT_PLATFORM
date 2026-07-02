@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -70,6 +71,7 @@ class JobDescription(BaseModel):
     normalized_text: str | None = None
     completeness: DescriptionCompleteness = DescriptionCompleteness.MISSING
     content_hash: str
+    structured_data: dict[str, Any] = Field(default_factory=dict)
     fetched_at: datetime = Field(default_factory=utc_now)
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -80,4 +82,3 @@ class JobDescription(BaseModel):
         if self.completeness is DescriptionCompleteness.SNIPPET and not self.raw_text:
             raise ValueError("A snippet description must contain raw text")
         return self
-

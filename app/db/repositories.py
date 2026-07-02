@@ -152,16 +152,28 @@ class JobDescriptionRepository:
     def create(self, description: JobDescription) -> JobDescription:
         self.connection.execute(
             """INSERT INTO job_descriptions
-            (id, job_id, raw_text, normalized_text, completeness, content_hash, fetched_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (id, job_id, raw_text, normalized_text, completeness, content_hash,
+             structured_data_json, fetched_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(description.id), str(description.job_id), description.raw_text,
                 description.normalized_text, description.completeness.value,
-                description.content_hash, _iso(description.fetched_at),
+                description.content_hash, _json(description.structured_data),
+                _iso(description.fetched_at),
                 _iso(description.created_at),
             ),
         )
         return description
+
+    def save_version(self, description: JobDescription) -> tuple[JobDescription, bool]:
+        existing = self.connection.execute(
+            """SELECT * FROM job_descriptions
+            WHERE job_id = ? AND content_hash = ?""",
+            (str(description.job_id), description.content_hash),
+        ).fetchone()
+        if existing:
+            return self._from_row(existing), False
+        return self.create(description), True
 
     def latest_for_job(self, job_id: UUID | str) -> JobDescription | None:
         row = self.connection.execute(
@@ -171,10 +183,16 @@ class JobDescriptionRepository:
         ).fetchone()
         if not row:
             return None
+        return self._from_row(row)
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> JobDescription:
         return JobDescription(
             id=row["id"], job_id=row["job_id"], raw_text=row["raw_text"],
             normalized_text=row["normalized_text"], completeness=row["completeness"],
-            content_hash=row["content_hash"], fetched_at=_dt(row["fetched_at"]),
+            content_hash=row["content_hash"],
+            structured_data=json.loads(row["structured_data_json"]),
+            fetched_at=_dt(row["fetched_at"]),
             created_at=_dt(row["created_at"]),
         )
 
@@ -333,16 +351,68 @@ class CollectionRunRepository:
         self.connection.execute(
             """INSERT INTO collection_runs
             (id, source, status, started_at, finished_at, jobs_found, jobs_stored,
+             jobs_inserted, jobs_updated, queries_executed, pages_requested,
+             search_requests_succeeded, search_requests_failed,
+             detail_requests_succeeded, detail_requests_failed,
              error_count, error_summary, config_snapshot_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(run.id), run.source.value, run.status.value, _iso(run.started_at),
                 _iso(run.finished_at), run.jobs_found, run.jobs_stored,
+                run.jobs_inserted, run.jobs_updated, run.queries_executed,
+                run.pages_requested, run.search_requests_succeeded,
+                run.search_requests_failed, run.detail_requests_succeeded,
+                run.detail_requests_failed,
                 run.error_count, run.error_summary, _json(run.config_snapshot),
                 _iso(run.created_at),
             ),
         )
         return run
+
+    def update(self, run: CollectionRun) -> CollectionRun:
+        cursor = self.connection.execute(
+            """UPDATE collection_runs SET
+                status = ?, started_at = ?, finished_at = ?, jobs_found = ?,
+                jobs_stored = ?, jobs_inserted = ?, jobs_updated = ?,
+                queries_executed = ?, pages_requested = ?,
+                search_requests_succeeded = ?, search_requests_failed = ?,
+                detail_requests_succeeded = ?, detail_requests_failed = ?,
+                error_count = ?, error_summary = ?, config_snapshot_json = ?
+            WHERE id = ?""",
+            (
+                run.status.value, _iso(run.started_at), _iso(run.finished_at),
+                run.jobs_found, run.jobs_stored, run.jobs_inserted,
+                run.jobs_updated, run.queries_executed, run.pages_requested,
+                run.search_requests_succeeded, run.search_requests_failed,
+                run.detail_requests_succeeded, run.detail_requests_failed,
+                run.error_count, run.error_summary, _json(run.config_snapshot),
+                str(run.id),
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"Collection run not found: {run.id}")
+        return run
+
+    def get(self, run_id: UUID | str) -> CollectionRun | None:
+        row = self.connection.execute(
+            "SELECT * FROM collection_runs WHERE id = ?", (str(run_id),)
+        ).fetchone()
+        if not row:
+            return None
+        return CollectionRun(
+            id=row["id"], source=row["source"], status=row["status"],
+            started_at=_dt(row["started_at"]), finished_at=_dt(row["finished_at"]),
+            jobs_found=row["jobs_found"], jobs_stored=row["jobs_stored"],
+            jobs_inserted=row["jobs_inserted"], jobs_updated=row["jobs_updated"],
+            queries_executed=row["queries_executed"], pages_requested=row["pages_requested"],
+            search_requests_succeeded=row["search_requests_succeeded"],
+            search_requests_failed=row["search_requests_failed"],
+            detail_requests_succeeded=row["detail_requests_succeeded"],
+            detail_requests_failed=row["detail_requests_failed"],
+            error_count=row["error_count"], error_summary=row["error_summary"],
+            config_snapshot=json.loads(row["config_snapshot_json"]),
+            created_at=_dt(row["created_at"]),
+        )
 
 
 class NotificationRepository:
@@ -385,4 +455,3 @@ class CVArtifactRepository:
             ),
         )
         return artifact
-

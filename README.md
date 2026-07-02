@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0 and 1 are implemented: typed configuration, structured logging, shared domain models, versioned SQLite migrations, transaction-scoped repositories, candidate-profile versioning, and audited application-status transitions.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–2 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, and a resilient Arbeitsagentur source adapter.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -15,8 +15,11 @@ Implemented:
 - Versioned candidate profiles and source/source-job-ID uniqueness.
 - Application states and immutable transition history.
 - Fixture-only tests with no external calls.
+- Arbeitsagentur v6 search and v4 detail parsing behind a source-independent contract.
+- Bounded pagination, retries/backoff, source-ID deduplication, description versioning, and collection-run metrics.
+- Offline fixture dry run and an explicitly opt-in live command.
 
-Not implemented yet: Arbeitsagentur or EnglishJobs collectors, Telegram delivery, CV generation integration, AI calls, Streamlit pages, duplicate clustering, or legacy-data import.
+Not implemented yet: EnglishJobs, Telegram delivery, scoring/ranking, CV generation integration, AI calls, Streamlit pages, duplicate clustering, or legacy-data import.
 
 ## Requirements
 
@@ -62,6 +65,24 @@ python -m pytest
 
 Tests use temporary SQLite databases and fixtures only. They do not call Arbeitsagentur, EnglishJobs, Telegram, OpenAI, Ollama, or MySQL.
 
+## Arbeitsagentur fixture dry run
+
+Dry run is the safe default. It parses saved fixtures and reports inserts/updates without creating or changing a database:
+
+```powershell
+python -m app.cli collect arbeitsagentur --dry-run --query "Data Analyst"
+```
+
+Useful bounded overrides include `--location`, `--published-within-days`, `--max-pages`, and `--page-size`.
+
+Live HTTP and SQLite persistence require an explicit flag:
+
+```powershell
+python -m app.cli collect arbeitsagentur --live --query "Data Analyst" --max-pages 1
+```
+
+The ordinary test suite never enables live mode. See [the adapter guide](docs/ARBEITSAGENTUR_ADAPTER.md) before any live run.
+
 ## Application lifecycle
 
 Supported states are `new`, `shortlisted`, `cv_ready`, `applied`, `skipped`, `rejected`, and `interview`. Every accepted change appends an immutable event. Direct `new → applied` is rejected, and creating a CV artifact does not change an application’s state.
@@ -69,4 +90,3 @@ Supported states are `new`, `shortlisted`, `cv_ready`, `applied`, `skipped`, `re
 ## Security
 
 Before any live integration is enabled, complete [the security checklist](docs/SECURITY_CHECKLIST.md). The credentials found during the audit must be rotated externally; their values are not copied into the unified application or documentation.
-

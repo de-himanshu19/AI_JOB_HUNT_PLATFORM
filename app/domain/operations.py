@@ -28,6 +28,14 @@ class CollectionRun(BaseModel):
     finished_at: datetime | None = None
     jobs_found: int = Field(default=0, ge=0)
     jobs_stored: int = Field(default=0, ge=0)
+    jobs_inserted: int = Field(default=0, ge=0)
+    jobs_updated: int = Field(default=0, ge=0)
+    queries_executed: int = Field(default=0, ge=0)
+    pages_requested: int = Field(default=0, ge=0)
+    search_requests_succeeded: int = Field(default=0, ge=0)
+    search_requests_failed: int = Field(default=0, ge=0)
+    detail_requests_succeeded: int = Field(default=0, ge=0)
+    detail_requests_failed: int = Field(default=0, ge=0)
     error_count: int = Field(default=0, ge=0)
     error_summary: str | None = None
     config_snapshot: dict[str, object] = Field(default_factory=dict)
@@ -69,4 +77,3 @@ class CVArtifact(BaseModel):
     validated: bool = False
     validation_summary: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-

@@ -31,7 +31,15 @@ This repository does not copy or display any discovered credential value. Rotati
 - [ ] Review EnglishJobs retrieval behavior and terms before implementing full-description retrieval.
 - [ ] Confirm notification idempotency tests pass before enabling Telegram.
 
+## Arbeitsagentur adapter controls
+
+- [x] The web-client API key is a configurable source default and is redacted from settings diagnostics even though it is not treated as a private user credential.
+- [x] Authentication headers and full payloads/descriptions are absent from routine logs.
+- [x] Connect/read timeouts, bounded retries, exponential backoff, and permanent-4xx behavior are fixture-tested.
+- [x] The normal suite and default CLI mode make no network calls.
+- [x] Live HTTP requires the explicit `--live` flag; the live pytest case additionally requires `RUN_ARBEITSAGENTUR_LIVE_TEST=1`.
+- [x] Saved fixtures contain no credentials or unnecessary personal contact details.
+
 ## Incident response
 
 If a secret is exposed: disable the affected feature, revoke/rotate the credential at the provider, inspect usage, remove it from current files and logs, assess repository history, and document the incident without reproducing the secret.
-

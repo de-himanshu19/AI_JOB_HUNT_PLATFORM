@@ -19,6 +19,10 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
     assert settings.strict_german_exclusion is False
     assert settings.language_risk_penalty == 15
     assert settings.banking_preference_bonus == 10
+    assert settings.arbeitsagentur_location == "Deutschland"
+    assert settings.arbeitsagentur_page_size == 25
+    assert settings.arbeitsagentur_max_pages == 5
+    assert len(settings.arbeitsagentur_queries) == len(set(settings.arbeitsagentur_queries))
 
 
 def test_windows_safe_relative_path_resolution(tmp_path: Path) -> None:
@@ -56,6 +60,17 @@ def test_primary_names_and_temporary_aliases(tmp_path: Path) -> None:
     assert primary.ai_ollama_api_key.get_secret_value() == "primary-key"
 
 
+def test_arbeitsagentur_query_override_is_typed_and_deduplicated(tmp_path: Path) -> None:
+    settings = config.settings_from_mapping(
+        {"ARBEITSAGENTUR_QUERIES": "Data Analyst, Reporting Analyst, Data Analyst"},
+        root=tmp_path,
+    )
+    assert settings.arbeitsagentur_queries == (
+        "Data Analyst",
+        "Reporting Analyst",
+    )
+
+
 def test_feature_specific_validation_is_deferred_until_enabled(tmp_path: Path) -> None:
     config.settings_from_mapping({}, root=tmp_path)
 
@@ -84,6 +99,7 @@ def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
     assert redacted["telegram_bot_token"] == "***REDACTED***"
     assert redacted["telegram_chat_id"] == "***REDACTED***"
     assert redacted["ai_ollama_api_key"] == "***REDACTED***"
+    assert redacted["arbeitsagentur_api_key"] == "***REDACTED***"
     assert "do-not-log" not in repr(redacted)
 
 

@@ -29,7 +29,7 @@ EXPECTED_TABLES = {
 
 def test_database_creation_from_zero_and_repeatable_migrations(tmp_path: Path) -> None:
     db = Database(tmp_path / "new/db.sqlite3")
-    assert migrate(db) == [1]
+    assert migrate(db) == [1, 2]
     assert migrate(db) == []
 
     with db.read_connection() as connection:
@@ -42,7 +42,7 @@ def test_database_creation_from_zero_and_repeatable_migrations(tmp_path: Path) -
         assert EXPECTED_TABLES <= tables
         assert connection.execute(
             "SELECT COUNT(*) AS count FROM schema_migrations"
-        ).fetchone()["count"] == 1
+        ).fetchone()["count"] == 2
 
 
 def test_required_sqlite_pragmas(database: Database) -> None:
@@ -85,4 +85,3 @@ def test_database_path_comes_from_typed_settings(tmp_path: Path) -> None:
     migrate(database)
     assert database.path == (tmp_path / "custom/jobs.db").resolve()
     assert database.path.exists()
-

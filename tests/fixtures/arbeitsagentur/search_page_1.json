@@ -1,0 +1,43 @@
+{
+  "maxErgebnisse": 2,
+  "ergebnisliste": [
+    {
+      "referenznummer": "REF-100",
+      "stellenangebotsTitel": "Data Analyst (m/w/d)",
+      "firma": "Beispiel Daten GmbH",
+      "datumErsteVeroeffentlichung": "2026-06-30",
+      "hauptberuf": "Datenanalyst/in",
+      "externeURL": "https://jobs.example.invalid/ref-100",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "10115",
+            "ort": "Berlin",
+            "region": "Berlin",
+            "land": "Deutschland"
+          }
+        }
+      ],
+      "kurzbeschreibung": "Analyse von Daten und Erstellung von Berichten in einem internationalen Team."
+    },
+    {
+      "referenznummer": "REF-200",
+      "stellenangebotsTitel": "Reporting Analyst",
+      "firma": "Example Reporting AG",
+      "datumErsteVeroeffentlichung": "2026-07-01",
+      "hauptberuf": "Business-Analyst/in",
+      "stellenlokationen": [
+        {
+          "adresse": {
+            "plz": "80331",
+            "ort": "München",
+            "region": "Bayern",
+            "land": "Deutschland"
+          }
+        }
+      ],
+      "kurzbeschreibung": "Prepare dashboards and reporting for a global analytics team."
+    }
+  ]
+}
+

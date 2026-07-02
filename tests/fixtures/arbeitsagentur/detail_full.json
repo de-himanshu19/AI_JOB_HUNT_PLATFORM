@@ -1,0 +1,29 @@
+{
+  "referenznummer": "REF-100",
+  "stellenbeschreibung": "Wir suchen eine Person für die Analyse von Geschäfts- und Qualitätsdaten. Die Tätigkeit umfasst Berichte, Dashboards und dokumentierte Datenprüfungen.",
+  "aufgaben": [
+    "Daten aus verschiedenen Quellen prüfen und auswerten",
+    "KPI-Berichte für Fachbereiche vorbereiten"
+  ],
+  "anforderungen": [
+    "Sehr gute Deutschkenntnisse auf Niveau C1",
+    "Very good English skills for an international team",
+    "Erfahrung mit SQL und Reporting"
+  ],
+  "arbeitgeberdarstellung": "Ein mittelständisches Unternehmen mit internationaler Zusammenarbeit.",
+  "arbeitsorte": [
+    {
+      "plz": "10115",
+      "ort": "Berlin",
+      "region": "Berlin",
+      "land": "Deutschland"
+    }
+  ],
+  "arbeitsverhaeltnis": "Vollzeit",
+  "befristung": "Unbefristet",
+  "arbeitszeitmodelle": ["Vollzeit", "Hybrid"],
+  "eintrittsdatum": "2026-08-01",
+  "bewerbungsfrist": "2026-07-31",
+  "externeURL": "https://jobs.example.invalid/ref-100/apply"
+}
+

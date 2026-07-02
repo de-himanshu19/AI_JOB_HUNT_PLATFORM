@@ -59,6 +59,8 @@ The following decisions govern later milestones:
 
 ## Milestone 2 — Arbeitsagentur adapter
 
+**Implementation status:** implemented in the unified root with fixture-backed parsing, explicit live mode, bounded retry/pagination, source-ID deduplication, SQLite persistence, description versioning, and collection-run finalization. No ranking, filtering, notifications, CV behavior, or lifecycle mutation was added.
+
 **Goal:** collect, fully detail, normalize, and store Arbeitsagentur jobs without Telegram coupling.
 
 **Reuse:** `job_search_agent/search_arbeitsagentur.py` endpoint logic, reference encoding, summary parsing, and German/English rules.

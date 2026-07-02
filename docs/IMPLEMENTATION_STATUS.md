@@ -26,6 +26,19 @@ External credential rotation remains a manual security gate. No credential value
 - Validated application transitions and database-enforced immutable event history.
 - Fixture-only configuration, model, database, repository, migration, and lifecycle tests.
 
+### Migration Milestone 2
+
+- Typed/configurable Arbeitsagentur endpoints, public client key, search plan, location, age window, page bounds, timeouts, retry count, and backoff.
+- Dedicated `requests.Session` client with injectable transport, connect/read timeouts, bounded exponential retry for timeouts, connection failures, HTTP 429, and HTTP 5xx; permanent 4xx responses are not retried.
+- Source-independent collection contract and typed raw summary/detail records.
+- v6 summary parser and v4 structured detail parser with full/snippet/missing description semantics.
+- Explicit German requirements, German level, English signals, customer-facing signals, and description-language metadata are stored without excluding jobs.
+- Bounded pagination beginning at page 1, maximum-page protection, empty/repeated-page stops, failed-middle-page continuation, and stable source-reference deduplication across pages/queries.
+- Collection service with atomic job/description persistence, stable internal IDs, first/last-seen behavior, run metrics, partial/failure finalization, and no application-status side effects.
+- Migration 002 adds request counters and structured versioned description metadata only.
+- Safe fixture dry run and explicit `--live` CLI mode.
+- Opt-in live smoke test is disabled unless `RUN_ARBEITSAGENTUR_LIVE_TEST=1`.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -42,9 +55,13 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Configuration/logging: `app/__init__.py`, `app/config.py`, `app/logging_config.py`.
 - Domain: `app/domain/__init__.py`, `enums.py`, `job.py`, `candidate.py`, `analysis.py`, `application.py`, `operations.py`.
 - Persistence: `app/db/__init__.py`, `connection.py`, `migrations.py`, `repositories.py`, `migrations/001_initial.sql`.
-- Services: `app/services/__init__.py`, `applications.py`.
+- Arbeitsagentur: `app/sources/base.py`, `app/sources/arbeitsagentur/{models,client,parser,adapter}.py`.
+- Persistence: `migrations/002_arbeitsagentur_collection.sql` and repository extensions.
+- Services/CLI: `app/services/collection.py`, `app/cli.py`.
 - Tests: `tests/conftest.py`, `test_config.py`, `test_models.py`, `test_database.py`, `test_repositories.py`, `test_applications.py`.
+- Milestone 2 tests/fixtures: `tests/fixtures/arbeitsagentur`, `tests/unit`, `tests/contract`, and `tests/integration`.
 - Documentation: `docs/IMPLEMENTATION_STATUS.md`, `docs/SECURITY_CHECKLIST.md`.
+- Adapter documentation: `docs/ARBEITSAGENTUR_ADAPTER.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -66,7 +83,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **38 passed**.
+- Fixture-only pytest suite: **91 passed, 1 explicitly disabled live smoke test skipped** at the Milestone 2 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -76,8 +93,11 @@ python -m pytest
 
 ## Current limitations
 
-- No collectors, live source clients, HTTP dependencies, or source fixtures yet.
-- No duplicate clusters or source-run-item tables yet; the current IDs, normalized fields, collection-run references, and repository boundaries allow later migrations.
+- No EnglishJobs adapter.
+- No cross-source/fuzzy duplicate clusters; Milestone 2 only deduplicates exact Arbeitsagentur references.
+- Description-language detection and explicit language signals are metadata only; penalties/ranking are deferred.
+- The detail parser is fixture-verified but the external API contract can still change; live smoke testing remains opt-in.
+- Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
 - No fit-analysis algorithm is integrated; `JobAnalysis` is a typed persistence placeholder.
 - No CV generation is integrated; the artifact schema supports FlowCV TXT only.
 - No Telegram integration; its schema exists only for later idempotency.
@@ -87,4 +107,4 @@ python -m pytest
 
 ## Next recommended milestone
 
-Stop here pending approval. The next milestone is the Arbeitsagentur adapter, implemented behind the common job contract with saved fixtures, pagination, structured detail parsing, bounded retries, and no Telegram coupling.
+Stop here pending approval. The next recommended milestone is the EnglishJobs adapter after reviewing its technically and legally permitted full-description retrieval path.

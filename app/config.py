@@ -11,6 +11,42 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 
 SECRET_NAME_MARKERS = ("TOKEN", "KEY", "PASSWORD", "SECRET", "CHAT_ID")
+DEFAULT_ARBEITSAGENTUR_QUERIES = tuple(
+    dict.fromkeys(
+        (
+            "Data Analyst",
+            "Business Analyst",
+            "Reporting Analyst",
+            "Operations Analyst",
+            "Risk Analyst",
+            "Compliance Analyst",
+            "KYC Analyst",
+            "AML Analyst",
+            "Financial Analyst",
+            "Data Quality Analyst",
+            "Datenanalyst",
+            "Data-Analyst",
+            "Business-Analyst",
+            "Risikoanalyst",
+            "Finanzanalyst",
+            "Compliance",
+            "Geldwäsche",
+            "Geldwäscheprävention",
+            "KYC",
+            "AML",
+            "Berichtswesen",
+            "Reporting",
+            "Controlling",
+            "Prozessanalyst",
+            "Prozessmanager",
+            "Datenqualität",
+            "Data Warehouse",
+            "Data-Warehouse-Analyst",
+            "Bank",
+            "Finanzdienstleistungen",
+        )
+    )
+)
 _CACHE_LOCK = Lock()
 _CACHED_SETTINGS: Settings | None = None
 _ENV_FILE_READS = 0
@@ -81,6 +117,19 @@ class Settings(BaseModel):
     language_risk_penalty: int = Field(default=15, ge=0, le=100)
     banking_preference_bonus: int = Field(default=10, ge=0, le=100)
 
+    arbeitsagentur_search_url: str
+    arbeitsagentur_detail_url: str
+    arbeitsagentur_api_key: SecretStr
+    arbeitsagentur_queries: tuple[str, ...] = DEFAULT_ARBEITSAGENTUR_QUERIES
+    arbeitsagentur_location: str = "Deutschland"
+    arbeitsagentur_published_within_days: int = Field(default=7, ge=0, le=365)
+    arbeitsagentur_page_size: int = Field(default=25, ge=1, le=100)
+    arbeitsagentur_max_pages: int = Field(default=5, ge=1, le=100)
+    arbeitsagentur_connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    arbeitsagentur_read_timeout_seconds: float = Field(default=20, gt=0, le=300)
+    arbeitsagentur_max_retries: int = Field(default=3, ge=0, le=10)
+    arbeitsagentur_backoff_seconds: float = Field(default=0.5, ge=0, le=60)
+
     telegram_enabled: bool = False
     telegram_bot_token: SecretStr | None = None
     telegram_chat_id: SecretStr | None = None
@@ -109,6 +158,8 @@ class Settings(BaseModel):
             raise ValueError(
                 "AI_OLLAMA_API_KEY is required only when AI_PROVIDER=ollama_cloud"
             )
+        if not self.arbeitsagentur_queries:
+            raise ValueError("At least one Arbeitsagentur search query is required")
         return self
 
     def redacted_dict(self) -> dict[str, object]:
@@ -138,6 +189,19 @@ def settings_from_mapping(
         ),
     )
 
+    configured_queries = _first(values, "ARBEITSAGENTUR_QUERIES")
+    queries = (
+        tuple(
+            dict.fromkeys(
+                item.strip()
+                for item in str(configured_queries).split(",")
+                if item.strip()
+            )
+        )
+        if configured_queries
+        else DEFAULT_ARBEITSAGENTUR_QUERIES
+    )
+
     return Settings(
         repo_root=root,
         env_file=root / ".env",
@@ -157,6 +221,50 @@ def settings_from_mapping(
         ),
         banking_preference_bonus=_first(
             values, "BANKING_PREFERENCE_BONUS", default="10"
+        ),
+        arbeitsagentur_search_url=_first(
+            values,
+            "ARBEITSAGENTUR_SEARCH_URL",
+            default=(
+                "https://rest.arbeitsagentur.de/jobboerse/"
+                "jobsuche-service/pc/v6/jobs"
+            ),
+        ),
+        arbeitsagentur_detail_url=_first(
+            values,
+            "ARBEITSAGENTUR_DETAIL_URL",
+            default=(
+                "https://rest.arbeitsagentur.de/jobboerse/"
+                "jobsuche-service/pc/v4/jobdetails"
+            ),
+        ),
+        arbeitsagentur_api_key=_first(
+            values, "ARBEITSAGENTUR_API_KEY", default="jobboerse-jobsuche"
+        ),
+        arbeitsagentur_queries=queries,
+        arbeitsagentur_location=_first(
+            values, "ARBEITSAGENTUR_LOCATION", default="Deutschland"
+        ),
+        arbeitsagentur_published_within_days=_first(
+            values, "ARBEITSAGENTUR_PUBLISHED_WITHIN_DAYS", default="7"
+        ),
+        arbeitsagentur_page_size=_first(
+            values, "ARBEITSAGENTUR_PAGE_SIZE", default="25"
+        ),
+        arbeitsagentur_max_pages=_first(
+            values, "ARBEITSAGENTUR_MAX_PAGES", default="5"
+        ),
+        arbeitsagentur_connect_timeout_seconds=_first(
+            values, "ARBEITSAGENTUR_CONNECT_TIMEOUT_SECONDS", default="5"
+        ),
+        arbeitsagentur_read_timeout_seconds=_first(
+            values, "ARBEITSAGENTUR_READ_TIMEOUT_SECONDS", default="20"
+        ),
+        arbeitsagentur_max_retries=_first(
+            values, "ARBEITSAGENTUR_MAX_RETRIES", default="3"
+        ),
+        arbeitsagentur_backoff_seconds=_first(
+            values, "ARBEITSAGENTUR_BACKOFF_SECONDS", default="0.5"
         ),
         telegram_enabled=_first(values, "TELEGRAM_ENABLED", default="false"),
         telegram_bot_token=_first(values, "TELEGRAM_BOT_TOKEN"),
@@ -194,4 +302,3 @@ def _reset_settings_cache_for_tests() -> None:
 
 def _env_file_read_count_for_tests() -> int:
     return _ENV_FILE_READS
-
