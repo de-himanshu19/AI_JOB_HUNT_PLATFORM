@@ -1,0 +1,197 @@
+"""Typed root configuration with one-time .env loading and safe redaction."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from threading import Lock
+from typing import Mapping
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+
+
+SECRET_NAME_MARKERS = ("TOKEN", "KEY", "PASSWORD", "SECRET", "CHAT_ID")
+_CACHE_LOCK = Lock()
+_CACHED_SETTINGS: Settings | None = None
+_ENV_FILE_READS = 0
+
+
+def repository_root() -> Path:
+    """Return the repository root based on this module, never the process cwd."""
+    return Path(__file__).resolve().parents[1]
+
+
+def resolve_root_path(root: Path, value: str | Path) -> Path:
+    """Resolve relative configuration paths against the repository root."""
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve(strict=False)
+
+
+def _parse_env_file(path: Path) -> dict[str, str]:
+    """Read a small dotenv-compatible file without interpolation or side effects."""
+    global _ENV_FILE_READS
+    _ENV_FILE_READS += 1
+    if not path.is_file():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            continue
+        key, raw_value = line.split("=", 1)
+        key = key.strip()
+        value = raw_value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+
+def _first(values: Mapping[str, str], primary: str, *aliases: str, default=None):
+    for name in (primary, *aliases):
+        value = values.get(name)
+        if value is not None and value != "":
+            return value
+    return default
+
+
+class Settings(BaseModel):
+    """Validated runtime settings for the local application core."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    repo_root: Path
+    env_file: Path
+    app_env: str = "local"
+    log_level: str = "INFO"
+    log_json: bool = True
+    data_dir: Path
+    database_path: Path
+    sqlite_busy_timeout_ms: int = Field(default=5000, ge=1, le=120_000)
+
+    strict_german_exclusion: bool = False
+    language_risk_penalty: int = Field(default=15, ge=0, le=100)
+    banking_preference_bonus: int = Field(default=10, ge=0, le=100)
+
+    telegram_enabled: bool = False
+    telegram_bot_token: SecretStr | None = None
+    telegram_chat_id: SecretStr | None = None
+
+    ai_provider: str = "rule_based"
+    ai_ollama_api_key: SecretStr | None = None
+    ai_local_model: str = "llama3.2:3b"
+    ai_cloud_model: str = "gpt-oss:20b"
+
+    @model_validator(mode="after")
+    def validate_enabled_features(self) -> "Settings":
+        if self.log_level.upper() not in {
+            "CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"
+        }:
+            raise ValueError("APP_LOG_LEVEL must be a standard logging level")
+        if self.telegram_enabled and (
+            self.telegram_bot_token is None or self.telegram_chat_id is None
+        ):
+            raise ValueError(
+                "Telegram credentials are required only when TELEGRAM_ENABLED=true"
+            )
+        allowed_ai = {"rule_based", "local_ollama", "ollama_cloud"}
+        if self.ai_provider not in allowed_ai:
+            raise ValueError(f"AI_PROVIDER must be one of {sorted(allowed_ai)}")
+        if self.ai_provider == "ollama_cloud" and self.ai_ollama_api_key is None:
+            raise ValueError(
+                "AI_OLLAMA_API_KEY is required only when AI_PROVIDER=ollama_cloud"
+            )
+        return self
+
+    def redacted_dict(self) -> dict[str, object]:
+        """Return settings safe for diagnostics and structured logs."""
+        values = self.model_dump(mode="json")
+        for name in list(values):
+            if any(marker in name.upper() for marker in SECRET_NAME_MARKERS):
+                values[name] = "***REDACTED***"
+        return values
+
+
+def settings_from_mapping(
+    values: Mapping[str, str], *, root: Path | None = None
+) -> Settings:
+    """Build settings from an explicit mapping; environment names override defaults."""
+    root = (root or repository_root()).resolve(strict=False)
+    data_dir = resolve_root_path(
+        root, _first(values, "JOBHUNT_DATA_DIR", "DATA_DIR", default="data")
+    )
+    database_path = resolve_root_path(
+        root,
+        _first(
+            values,
+            "JOBHUNT_DATABASE_PATH",
+            "DATABASE_PATH",
+            default=data_dir / "job_hunt.sqlite3",
+        ),
+    )
+
+    return Settings(
+        repo_root=root,
+        env_file=root / ".env",
+        app_env=_first(values, "APP_ENV", default="local"),
+        log_level=str(_first(values, "APP_LOG_LEVEL", default="INFO")).upper(),
+        log_json=_first(values, "APP_LOG_JSON", default="true"),
+        data_dir=data_dir,
+        database_path=database_path,
+        sqlite_busy_timeout_ms=_first(
+            values, "SQLITE_BUSY_TIMEOUT_MS", default="5000"
+        ),
+        strict_german_exclusion=_first(
+            values, "STRICT_GERMAN_EXCLUSION", default="false"
+        ),
+        language_risk_penalty=_first(
+            values, "LANGUAGE_RISK_PENALTY", default="15"
+        ),
+        banking_preference_bonus=_first(
+            values, "BANKING_PREFERENCE_BONUS", default="10"
+        ),
+        telegram_enabled=_first(values, "TELEGRAM_ENABLED", default="false"),
+        telegram_bot_token=_first(values, "TELEGRAM_BOT_TOKEN"),
+        telegram_chat_id=_first(values, "TELEGRAM_CHAT_ID"),
+        ai_provider=_first(values, "AI_PROVIDER", default="rule_based"),
+        ai_ollama_api_key=_first(
+            values, "AI_OLLAMA_API_KEY", "OLLAMA_API_KEY"
+        ),
+        ai_local_model=_first(values, "AI_LOCAL_MODEL", default="llama3.2:3b"),
+        ai_cloud_model=_first(values, "AI_CLOUD_MODEL", default="gpt-oss:20b"),
+    )
+
+
+def get_settings() -> Settings:
+    """Load the root .env once, overlay process environment, and cache settings."""
+    global _CACHED_SETTINGS
+    if _CACHED_SETTINGS is not None:
+        return _CACHED_SETTINGS
+    with _CACHE_LOCK:
+        if _CACHED_SETTINGS is None:
+            root = repository_root()
+            merged = _parse_env_file(root / ".env")
+            merged.update(os.environ)
+            _CACHED_SETTINGS = settings_from_mapping(merged, root=root)
+    return _CACHED_SETTINGS
+
+
+def _reset_settings_cache_for_tests() -> None:
+    """Reset singleton state for isolated tests; not part of the public API."""
+    global _CACHED_SETTINGS, _ENV_FILE_READS
+    with _CACHE_LOCK:
+        _CACHED_SETTINGS = None
+        _ENV_FILE_READS = 0
+
+
+def _env_file_read_count_for_tests() -> int:
+    return _ENV_FILE_READS
+

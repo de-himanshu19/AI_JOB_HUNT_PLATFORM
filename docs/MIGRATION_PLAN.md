@@ -1,5 +1,18 @@
 # Migration Plan
 
+## Approved product decisions and implementation status
+
+As of 2026-07-02, the root implementation for Milestones 0 and 1 has been added. Verification results are recorded in `IMPLEMENTATION_STATUS.md` and the implementation handoff. External credential rotation remains a required manual security gate before any live integration.
+
+The following decisions govern later milestones:
+
+- German-language jobs are retained by default. Description language and explicit German-level requirements are separate signals; a configurable visible risk penalty applies. Strict exclusion is optional and disabled by default.
+- Banking is a configurable preference bonus, never a strict filter.
+- EnglishJobs descriptions must be marked `full`, `snippet`, or `missing`; full retrieval requires prior technical/legal review, and snippets must never be treated as full descriptions.
+- Deterministic rule-based analysis/CV logic from `ai_cv_tailor` is authoritative. Ollama polishing is optional; OpenAI is deferred.
+- FlowCV TXT, evidence reports, and rule-based backups are the MVP artifact scope. DOCX/PDF are deferred.
+- SQLite starts clean. Old CSV/MySQL data is not imported; sent-history import is deferred.
+
 ## Principles
 
 - Add the unified application beside `existing_projects/`; do not modify legacy code during extraction.
@@ -9,6 +22,8 @@
 - A milestone is complete only when its acceptance tests pass; prior entry points remain rollback references until parity is established.
 
 ## Milestone 0 — Security and reproducible baseline
+
+**Implementation status:** implemented in the unified root. Credential rotation remains an external manual acceptance gate.
 
 **Goal:** make subsequent integration safe and measurable.
 
@@ -25,6 +40,8 @@
 **Known limitations:** no unified runtime behavior yet; old credentials may remain in historical repository objects until separately purged.
 
 ## Milestone 1 — Domain model, SQLite, and status tracking
+
+**Implementation status:** implemented in the unified root with versioned SQL migration, transaction-scoped repositories, immutable lifecycle events, and fixture-only tests.
 
 **Goal:** establish the source-independent core before any collector migration.
 
@@ -171,4 +188,3 @@
 ## Recommended first implementation milestone
 
 Begin with Milestone 0 and then Milestone 1 as the first functional slice: typed configuration, the common `Job`/candidate/application models, SQLite migrations/repositories, and fixture-driven tests. Starting with a collector would merely reproduce the existing schema fragmentation. A stable core lets every later adapter return the same object and makes status/notification/CV linkage correct from day one.
-

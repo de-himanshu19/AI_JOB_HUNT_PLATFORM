@@ -1,24 +1,32 @@
-# Legacy projects remain locally available to Codex
+# Legacy projects remain local read-only references and contain old credentials,
+# generated outputs, nested repositories, and virtual environments.
 existing_projects/
 
-# Secrets
+# Local configuration and credentials
 .env
 .env.*
-!.env.example
 **/.env
 **/.env.*
 **/telegram.txt
+!/.env.example
 
 # Python
-.venv/
-venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
 
-# Databases and generated data
+# Local runtime data and generated artifacts
+data/*.sqlite3
+data/*.sqlite3-*
+data/artifacts/
+logs/
 *.db
 *.sqlite
 *.sqlite3
@@ -26,5 +34,9 @@ __pycache__/
 outputs/
 reports/
 exports/
-data/*.db
-data/*.sqlite*
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
