@@ -1,0 +1,26 @@
+[
+  {
+    "name": "same canonical URL",
+    "expected": "match",
+    "left": {"source": "arbeitsagentur", "source_job_id": "aa-1", "title": "Data Analyst", "company": "Acme GmbH", "city": "Berlin", "url": "https://jobs.acme.test/42?utm_source=board"},
+    "right": {"source": "englishjobs", "source_job_id": "ej-1", "title": "Unrelated display title", "company": "Acme AG", "city": "Hamburg", "url": "https://jobs.acme.test/42"}
+  },
+  {
+    "name": "cross-source content match",
+    "expected": "match",
+    "left": {"source": "arbeitsagentur", "source_job_id": "aa-2", "title": "Data Reporting Analyst", "company": "Example Bank GmbH", "city": "München", "published": "2026-07-01", "description": "Build SQL reports and Power BI dashboards for finance teams"},
+    "right": {"source": "englishjobs", "source_job_id": "ej-2", "title": "Data Reporting Analyst", "company": "Example Bank AG", "city": "Munich", "published": "2026-07-03", "description": "Build SQL reports and Power BI dashboards for finance teams"}
+  },
+  {
+    "name": "seniority near miss",
+    "expected": "review",
+    "left": {"source": "arbeitsagentur", "source_job_id": "aa-3", "title": "Senior Risk Analyst", "company": "Example Bank GmbH", "city": "Berlin", "published": "2026-07-01", "description": "Own market risk reporting and regulatory controls"},
+    "right": {"source": "englishjobs", "source_job_id": "ej-3", "title": "Junior Risk Analyst", "company": "Example Bank AG", "city": "Berlin", "published": "2026-07-01", "description": "Own market risk reporting and regulatory controls"}
+  },
+  {
+    "name": "different vacancy",
+    "expected": "distinct",
+    "left": {"source": "arbeitsagentur", "source_job_id": "aa-4", "title": "Compliance Analyst", "company": "North Bank GmbH", "city": "Berlin", "published": "2026-07-01", "description": "AML transaction monitoring"},
+    "right": {"source": "englishjobs", "source_job_id": "ej-4", "title": "Software Engineer", "company": "South Labs AG", "city": "Hamburg", "published": "2026-05-01", "description": "Develop distributed Java services"}
+  }
+]

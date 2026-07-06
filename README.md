@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–2 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, and a resilient Arbeitsagentur source adapter.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–5 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, and deterministic fit analysis/ranking.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -17,9 +17,19 @@ Implemented:
 - Fixture-only tests with no external calls.
 - Arbeitsagentur v6 search and v4 detail parsing behind a source-independent contract.
 - Bounded pagination, retries/backoff, source-ID deduplication, description versioning, and collection-run metrics.
+- EnglishJobs state and keyword/location collection behind the same collection service and SQLite persistence flow.
+- EnglishJobs same-source identity handling using listing IDs, normalized URLs, and deterministic fallback fingerprints.
+- Explicit EnglishJobs description completeness handling: `full`, `snippet`, or `missing`.
 - Offline fixture dry run and an explicitly opt-in live command.
+- Versioned title, company, location, description, and URL normalization.
+- Explainable cross-source duplicate clusters with conservative gray-zone review.
+- Idempotent offline backfill plus transactional merge, split, and rollback operations.
+- Generic versioned candidate-profile import and inspection.
+- Evidence-backed full-description fit analysis with explicit missing evidence, penalties, and caps.
+- Source-neutral logical-vacancy ranking with visible components and stable ties.
+- Immutable analysis/ranking caches keyed by profile, description, and rule versions.
 
-Not implemented yet: EnglishJobs, Telegram delivery, scoring/ranking, CV generation integration, AI calls, Streamlit pages, duplicate clustering, or legacy-data import.
+Not implemented yet: Telegram delivery, CV generation integration, AI calls, Streamlit pages, or legacy-data import.
 
 ## Requirements
 
@@ -82,6 +92,56 @@ python -m app.cli collect arbeitsagentur --live --query "Data Analyst" --max-pag
 ```
 
 The ordinary test suite never enables live mode. See [the adapter guide](docs/ARBEITSAGENTUR_ADAPTER.md) before any live run.
+
+## EnglishJobs fixture dry run
+
+State mode dry run:
+
+```powershell
+python -m app.cli collect englishjobs --dry-run --state bayern
+```
+
+Keyword/location mode dry run:
+
+```powershell
+python -m app.cli collect englishjobs --dry-run --query "Data Analyst" --location Germany
+```
+
+Dry run uses saved HTML fixtures, resolves same-source identity, reports completeness and collection metrics, and does not create or modify the SQLite database.
+
+Live HTTP and SQLite persistence require an explicit flag:
+
+```powershell
+python -m app.cli collect englishjobs --live --state bayern --max-pages 1
+```
+
+The normal suite never enables this mode. Review [the adapter guide](docs/ENGLISHJOBS_ADAPTER.md) and [the security checklist](docs/SECURITY_CHECKLIST.md) before any live run.
+
+## Normalize and cluster stored jobs
+
+Milestone 4 commands are offline and operate only on SQLite:
+
+```powershell
+python -m app.cli deduplicate backfill
+python -m app.cli deduplicate review-list --status pending
+```
+
+See [the duplicate-clustering guide](docs/DUPLICATE_CLUSTERING.md) for review,
+split, version rollback, and company-alias configuration commands.
+
+## Analyze and rank stored jobs
+
+Milestone 5 commands are offline:
+
+```powershell
+python -m app.cli profile import profile.json --profile-key candidate
+python -m app.cli analyze --profile-id <profile-id>
+python -m app.cli rank --profile-id <profile-id>
+```
+
+Only full descriptions receive authoritative fit scores. See
+[the fit-analysis guide](docs/FIT_ANALYSIS.md) for profile schema, scoring,
+versioning, completeness policy, and deterministic ranking behavior.
 
 ## Application lifecycle
 

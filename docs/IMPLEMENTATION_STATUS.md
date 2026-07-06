@@ -1,6 +1,6 @@
 # Implementation Status
 
-Status date: 2026-07-02
+Status date: 2026-07-06
 
 ## Completed
 
@@ -39,6 +39,40 @@ External credential rotation remains a manual security gate. No credential value
 - Safe fixture dry run and explicit `--live` CLI mode.
 - Opt-in live smoke test is disabled unless `RUN_ARBEITSAGENTUR_LIVE_TEST=1`.
 
+### Migration Milestone 3
+
+- Typed/configurable EnglishJobs base URL, state seeds, page size/bounds, connect/read timeouts, retry count, backoff, and per-request delay.
+- One EnglishJobs adapter supporting both state searches and keyword/location searches through the shared collection service and SQLite repositories.
+- Shared same-source identity handling using listing IDs first, then normalized listing/clickout URLs, then deterministic fingerprints.
+- HTML card parsing with selector fallbacks, total-count extraction, Unicode-safe URL building, and visible invalid-card/selectors errors.
+- Safe bounded pagination with empty-page stop, repeated-page detection, max-page protection, failed-middle-page continuation, and total-count fallback when no next-page selector is present.
+- Safe detail behavior: full descriptions parsed only from reachable EnglishJobs-hosted detail pages; clickout resolution records canonical destination URLs without fabricating full descriptions.
+- Explicit `full`, `snippet`, and `missing` description completeness for every EnglishJobs description version.
+- Fixture-backed dry-run CLI for both state mode and keyword/location mode, plus an opt-in live smoke test disabled unless `RUN_ENGLISHJOBS_LIVE_TEST=1`.
+
+### Migration Milestone 4
+
+- Deterministic, versioned title, company, location, description, and canonical-URL normalization that preserves raw source values.
+- Typed company-alias configuration with a repository-root JSON file and optional path override.
+- Layered matching using exact identity, canonical URL, strong fingerprints, and conservative cross-source similarity.
+- Seniority-conflict protection and explainable gray-zone candidates that remain separate until human approval.
+- Versioned duplicate clusters, job links, and review candidates with one mapping per job and algorithm version.
+- Idempotent offline backfill with deterministic identities and no source-row deletion.
+- Transactional review merge, rejection, manual split, version rollback, and representative reassignment.
+- Offline CLI commands plus normalization matrices, a gold-pair dataset, precision/recall assertions, and rollback tests.
+
+### Migration Milestone 5
+
+- Generic versioned candidate evidence contract covering work, projects, education/training, skills/tools, languages, domains, verified metrics, and preferences.
+- Deterministic typed requirement extraction and strict evidence precedence without candidate facts in code.
+- Full-description-only authoritative fit scores; snippet/missing descriptions remain explicitly prefilter-only.
+- Visible positive components, penalties, score caps, missing evidence, risk flags, reasons, and all input/rule versions.
+- Separate profile-driven prefilter and verified fit semantics; no source field affects analysis.
+- Immutable analysis cache keyed by job, description, profile, analyzer, rules, and ranking versions.
+- Logical-vacancy ranking over Milestone 4 representatives with auditable components and stable tie-breaks.
+- Offline profile import/list/show, analyze, analysis-show, and rank CLI commands.
+- Migration 004 preserves version-003 jobs, descriptions, profiles, clusters/reviews, applications/events, analyses, and CV-artifact foreign keys.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -56,12 +90,16 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Domain: `app/domain/__init__.py`, `enums.py`, `job.py`, `candidate.py`, `analysis.py`, `application.py`, `operations.py`.
 - Persistence: `app/db/__init__.py`, `connection.py`, `migrations.py`, `repositories.py`, `migrations/001_initial.sql`.
 - Arbeitsagentur: `app/sources/base.py`, `app/sources/arbeitsagentur/{models,client,parser,adapter}.py`.
+- EnglishJobs: `app/sources/englishjobs/{models,url_builder,client,parser,adapter}.py`.
 - Persistence: `migrations/002_arbeitsagentur_collection.sql` and repository extensions.
 - Services/CLI: `app/services/collection.py`, `app/cli.py`.
 - Tests: `tests/conftest.py`, `test_config.py`, `test_models.py`, `test_database.py`, `test_repositories.py`, `test_applications.py`.
 - Milestone 2 tests/fixtures: `tests/fixtures/arbeitsagentur`, `tests/unit`, `tests/contract`, and `tests/integration`.
+- Milestone 3 tests/fixtures: `tests/fixtures/englishjobs`, `tests/unit/test_englishjobs_*`, and `tests/integration/test_englishjobs_*`.
 - Documentation: `docs/IMPLEMENTATION_STATUS.md`, `docs/SECURITY_CHECKLIST.md`.
-- Adapter documentation: `docs/ARBEITSAGENTUR_ADAPTER.md`.
+- Adapter documentation: `docs/ARBEITSAGENTUR_ADAPTER.md`, `docs/ENGLISHJOBS_ADAPTER.md`.
+- Milestone 4: `app/domain/duplicates.py`, `app/services/{normalization,deduplication}.py`, `migrations/003_normalization_duplicates.sql`, `config/company_aliases.json`, Milestone 4 tests/fixtures, and `docs/DUPLICATE_CLUSTERING.md`.
+- Milestone 5: generic candidate/analysis domain contracts, requirements/evidence/prefilter/fit/ranking services, `migrations/004_fit_analysis_ranking.sql`, `config/fit_rules.json`, golden tests/fixtures, and `docs/FIT_ANALYSIS.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -83,22 +121,23 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **91 passed, 1 explicitly disabled live smoke test skipped** at the Milestone 2 verification point.
+- Fixture-only pytest suite: **161 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 5 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
 - SQLite foreign keys, WAL, and busy timeout: passed.
+- EnglishJobs fixture CLI dry-run path: covered in integration tests for both state and keyword/location modes.
 - Legacy content fingerprint: compared during final handoff; `existing_projects/` unchanged.
 - External credential rotation: pending manual provider/account action and therefore remains the only open Milestone 0 security gate.
 
 ## Current limitations
 
-- No EnglishJobs adapter.
-- No cross-source/fuzzy duplicate clusters; Milestone 2 only deduplicates exact Arbeitsagentur references.
+- Fuzzy duplicate matches cannot be perfect; conservative gray-zone candidates require human review.
 - Description-language detection and explicit language signals are metadata only; penalties/ranking are deferred.
 - The detail parser is fixture-verified but the external API contract can still change; live smoke testing remains opt-in.
+- EnglishJobs full-description retrieval is intentionally conservative; many listings may remain snippet-only even when a clickout destination is known.
 - Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
-- No fit-analysis algorithm is integrated; `JobAnalysis` is a typed persistence placeholder.
+- Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.
 - No CV generation is integrated; the artifact schema supports FlowCV TXT only.
 - No Telegram integration; its schema exists only for later idempotency.
 - No Streamlit UI.
@@ -107,4 +146,4 @@ python -m pytest
 
 ## Next recommended milestone
 
-Stop here pending approval. The next recommended milestone is the EnglishJobs adapter after reviewing its technically and legally permitted full-description retrieval path.
+Stop here pending approval. The next recommended milestone is Milestone 6 Telegram top 20.

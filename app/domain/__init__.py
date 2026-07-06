@@ -1,8 +1,26 @@
 """Typed domain models shared by every future source and delivery surface."""
 
-from app.domain.analysis import JobAnalysis
+from app.domain.analysis import (
+    AnalysisAuthority,
+    EvidenceReference,
+    EvidenceType,
+    JobAnalysis,
+    JobRanking,
+    JobRequirement,
+    RequirementCategory,
+    ScoreCap,
+    ScoreComponent,
+)
 from app.domain.application import Application, ApplicationEvent
-from app.domain.candidate import CandidateProfile
+from app.domain.candidate import CandidateEvidenceProfile, CandidateProfile
+from app.domain.duplicates import (
+    DuplicateCandidate,
+    DuplicateCluster,
+    DuplicateMatchMethod,
+    JobDuplicateLink,
+    MatchDecision,
+    ReviewStatus,
+)
 from app.domain.enums import (
     ApplicationStatus,
     ArtifactFormat,
@@ -20,19 +38,33 @@ __all__ = [
     "Application",
     "ApplicationEvent",
     "ApplicationStatus",
+    "AnalysisAuthority",
     "ArtifactFormat",
     "ArtifactSource",
     "CVArtifact",
     "CandidateProfile",
+    "CandidateEvidenceProfile",
     "CollectionRun",
     "CollectionRunStatus",
     "DescriptionCompleteness",
+    "EvidenceReference",
+    "EvidenceType",
+    "DuplicateCandidate",
+    "DuplicateCluster",
+    "DuplicateMatchMethod",
     "Job",
     "JobAnalysis",
+    "JobRanking",
+    "JobRequirement",
     "JobDescription",
+    "JobDuplicateLink",
     "JobSource",
     "Notification",
     "NotificationChannel",
     "NotificationStatus",
+    "MatchDecision",
+    "ReviewStatus",
+    "RequirementCategory",
+    "ScoreCap",
+    "ScoreComponent",
 ]
-

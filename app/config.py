@@ -47,6 +47,24 @@ DEFAULT_ARBEITSAGENTUR_QUERIES = tuple(
         )
     )
 )
+DEFAULT_ENGLISHJOBS_STATES = (
+    "baden_wuerttemberg",
+    "bayern",
+    "berlin",
+    "brandenburg",
+    "bremen",
+    "hamburg",
+    "hessen",
+    "mecklenburg_vorpommern",
+    "niedersachsen",
+    "nordrhein_westfalen",
+    "rheinland_pfalz",
+    "saarland",
+    "sachsen",
+    "sachsen_anhalt",
+    "schleswig_holstein",
+    "thueringen",
+)
 _CACHE_LOCK = Lock()
 _CACHED_SETTINGS: Settings | None = None
 _ENV_FILE_READS = 0
@@ -111,6 +129,8 @@ class Settings(BaseModel):
     log_json: bool = True
     data_dir: Path
     database_path: Path
+    company_aliases_path: Path
+    fit_rules_path: Path
     sqlite_busy_timeout_ms: int = Field(default=5000, ge=1, le=120_000)
 
     strict_german_exclusion: bool = False
@@ -129,6 +149,16 @@ class Settings(BaseModel):
     arbeitsagentur_read_timeout_seconds: float = Field(default=20, gt=0, le=300)
     arbeitsagentur_max_retries: int = Field(default=3, ge=0, le=10)
     arbeitsagentur_backoff_seconds: float = Field(default=0.5, ge=0, le=60)
+
+    englishjobs_base_url: str = "https://englishjobs.de"
+    englishjobs_states: tuple[str, ...] = DEFAULT_ENGLISHJOBS_STATES
+    englishjobs_page_size: int = Field(default=20, ge=1, le=100)
+    englishjobs_max_pages: int = Field(default=5, ge=1, le=100)
+    englishjobs_connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    englishjobs_read_timeout_seconds: float = Field(default=20, gt=0, le=300)
+    englishjobs_max_retries: int = Field(default=3, ge=0, le=10)
+    englishjobs_backoff_seconds: float = Field(default=0.5, ge=0, le=60)
+    englishjobs_request_delay_seconds: float = Field(default=1.0, ge=0, le=60)
 
     telegram_enabled: bool = False
     telegram_bot_token: SecretStr | None = None
@@ -188,6 +218,18 @@ def settings_from_mapping(
             default=data_dir / "job_hunt.sqlite3",
         ),
     )
+    company_aliases_path = resolve_root_path(
+        root,
+        _first(
+            values,
+            "DEDUP_COMPANY_ALIASES_PATH",
+            default="config/company_aliases.json",
+        ),
+    )
+    fit_rules_path = resolve_root_path(
+        root,
+        _first(values, "FIT_RULES_PATH", default="config/fit_rules.json"),
+    )
 
     configured_queries = _first(values, "ARBEITSAGENTUR_QUERIES")
     queries = (
@@ -201,6 +243,18 @@ def settings_from_mapping(
         if configured_queries
         else DEFAULT_ARBEITSAGENTUR_QUERIES
     )
+    configured_states = _first(values, "ENGLISHJOBS_STATES")
+    englishjobs_states = (
+        tuple(
+            dict.fromkeys(
+                item.strip()
+                for item in str(configured_states).split(",")
+                if item.strip()
+            )
+        )
+        if configured_states
+        else DEFAULT_ENGLISHJOBS_STATES
+    )
 
     return Settings(
         repo_root=root,
@@ -210,6 +264,8 @@ def settings_from_mapping(
         log_json=_first(values, "APP_LOG_JSON", default="true"),
         data_dir=data_dir,
         database_path=database_path,
+        company_aliases_path=company_aliases_path,
+        fit_rules_path=fit_rules_path,
         sqlite_busy_timeout_ms=_first(
             values, "SQLITE_BUSY_TIMEOUT_MS", default="5000"
         ),
@@ -265,6 +321,31 @@ def settings_from_mapping(
         ),
         arbeitsagentur_backoff_seconds=_first(
             values, "ARBEITSAGENTUR_BACKOFF_SECONDS", default="0.5"
+        ),
+        englishjobs_base_url=_first(
+            values, "ENGLISHJOBS_BASE_URL", default="https://englishjobs.de"
+        ),
+        englishjobs_states=englishjobs_states,
+        englishjobs_page_size=_first(
+            values, "ENGLISHJOBS_PAGE_SIZE", default="20"
+        ),
+        englishjobs_max_pages=_first(
+            values, "ENGLISHJOBS_MAX_PAGES", default="5"
+        ),
+        englishjobs_connect_timeout_seconds=_first(
+            values, "ENGLISHJOBS_CONNECT_TIMEOUT_SECONDS", default="5"
+        ),
+        englishjobs_read_timeout_seconds=_first(
+            values, "ENGLISHJOBS_READ_TIMEOUT_SECONDS", default="20"
+        ),
+        englishjobs_max_retries=_first(
+            values, "ENGLISHJOBS_MAX_RETRIES", default="3"
+        ),
+        englishjobs_backoff_seconds=_first(
+            values, "ENGLISHJOBS_BACKOFF_SECONDS", default="0.5"
+        ),
+        englishjobs_request_delay_seconds=_first(
+            values, "ENGLISHJOBS_REQUEST_DELAY_SECONDS", default="1.0"
         ),
         telegram_enabled=_first(values, "TELEGRAM_ENABLED", default="false"),
         telegram_bot_token=_first(values, "TELEGRAM_BOT_TOKEN"),

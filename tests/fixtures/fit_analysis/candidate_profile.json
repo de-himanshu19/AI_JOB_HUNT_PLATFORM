@@ -1,0 +1,65 @@
+{
+  "personal_info": {"full_name": "Example Candidate"},
+  "work_experience": {
+    "items": [
+      {
+        "id": "work-reporting",
+        "role": "Reporting Analyst",
+        "summary": "Built operational reports and validated business data.",
+        "skills": ["reporting", "data validation", "SQL"],
+        "tools": ["SQL", "SAP"],
+        "domains": ["operations"],
+        "seniority": "mid",
+        "evidence_strength": "direct"
+      }
+    ]
+  },
+  "projects": {
+    "items": [
+      {
+        "id": "project-bi",
+        "name": "BI Dashboard Project",
+        "summary": "Created a Power BI dashboard with Python data preparation.",
+        "skills": ["Power BI", "Python"],
+        "evidence_strength": "supporting"
+      }
+    ]
+  },
+  "education": {
+    "items": [
+      {
+        "id": "education-business",
+        "degree": "Business degree",
+        "summary": "General business education.",
+        "evidence_strength": "supporting"
+      }
+    ]
+  },
+  "courses": {
+    "items": [
+      {
+        "id": "course-python",
+        "name": "Python Analytics Course",
+        "summary": "Course exercises using Python.",
+        "skills": ["Python"],
+        "evidence_strength": "supporting"
+      }
+    ]
+  },
+  "skills_and_tools": {
+    "skills": ["SQL", "reporting", "data validation"],
+    "tools": ["SQL", "SAP", "Power BI"]
+  },
+  "languages": [
+    {"name": "English", "proficiency": "fluent"},
+    {"name": "German", "proficiency": "A2"}
+  ],
+  "domains": ["operations", "reporting"],
+  "verified_metrics": ["Reduced reporting time by 10%"],
+  "preferences": {
+    "target_role_families": ["Data Analyst", "Reporting Analyst"],
+    "preferred_locations": ["Berlin"],
+    "mobility": ["hybrid", "remote"],
+    "preferred_domains": ["reporting"]
+  }
+}

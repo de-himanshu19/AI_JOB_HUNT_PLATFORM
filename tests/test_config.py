@@ -14,6 +14,10 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
 
     assert settings.database_path == (tmp_path / "data/job_hunt.sqlite3").resolve()
     assert settings.data_dir == (tmp_path / "data").resolve()
+    assert settings.company_aliases_path == (
+        tmp_path / "config/company_aliases.json"
+    ).resolve()
+    assert settings.fit_rules_path == (tmp_path / "config/fit_rules.json").resolve()
     assert settings.telegram_enabled is False
     assert settings.ai_provider == "rule_based"
     assert settings.strict_german_exclusion is False
@@ -23,6 +27,10 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
     assert settings.arbeitsagentur_page_size == 25
     assert settings.arbeitsagentur_max_pages == 5
     assert len(settings.arbeitsagentur_queries) == len(set(settings.arbeitsagentur_queries))
+    assert settings.englishjobs_base_url == "https://englishjobs.de"
+    assert settings.englishjobs_page_size == 20
+    assert settings.englishjobs_max_pages == 5
+    assert settings.englishjobs_states[0] == "baden_wuerttemberg"
 
 
 def test_windows_safe_relative_path_resolution(tmp_path: Path) -> None:
@@ -69,6 +77,14 @@ def test_arbeitsagentur_query_override_is_typed_and_deduplicated(tmp_path: Path)
         "Data Analyst",
         "Reporting Analyst",
     )
+
+
+def test_englishjobs_state_override_is_typed_and_deduplicated(tmp_path: Path) -> None:
+    settings = config.settings_from_mapping(
+        {"ENGLISHJOBS_STATES": "bayern, berlin, bayern"},
+        root=tmp_path,
+    )
+    assert settings.englishjobs_states == ("bayern", "berlin")
 
 
 def test_feature_specific_validation_is_deferred_until_enabled(tmp_path: Path) -> None:

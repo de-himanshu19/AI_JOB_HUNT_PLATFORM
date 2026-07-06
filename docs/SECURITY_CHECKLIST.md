@@ -40,6 +40,15 @@ This repository does not copy or display any discovered credential value. Rotati
 - [x] Live HTTP requires the explicit `--live` flag; the live pytest case additionally requires `RUN_ARBEITSAGENTUR_LIVE_TEST=1`.
 - [x] Saved fixtures contain no credentials or unnecessary personal contact details.
 
+## EnglishJobs adapter controls
+
+- [x] No API key or credential is required for the implemented adapter path.
+- [x] Connect/read timeouts, bounded retries, backoff, request delay, and permanent-4xx behavior are fixture-tested.
+- [x] The normal suite and default CLI mode make no network calls.
+- [x] Live HTTP requires the explicit `--live` flag; the live pytest case additionally requires `RUN_ENGLISHJOBS_LIVE_TEST=1`.
+- [x] Clickout resolution records canonical destination URLs conservatively and does not fabricate full descriptions from unresolved external pages.
+- [x] Saved fixtures contain no credentials or unnecessary personal details.
+
 ## Incident response
 
 If a secret is exposed: disable the affected feature, revoke/rotate the credential at the provider, inspect usage, remove it from current files and logs, assess repository history, and document the incident without reproducing the secret.

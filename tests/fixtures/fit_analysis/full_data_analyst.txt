@@ -1,0 +1,5 @@
+Data Analyst
+You must have SQL and Power BI experience.
+Python is optional and considered a nice to have.
+Fluent English is required.
+The role builds operational reporting and validates business data.

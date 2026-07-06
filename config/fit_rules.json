@@ -1,0 +1,35 @@
+{
+  "rules_version": "m5-rules-v1",
+  "analyzer_version": "m5-analyzer-v1",
+  "ranking_version": "m5-ranking-v1",
+  "evidence_weights": {
+    "direct_professional": 1.0,
+    "professional_transferable": 0.65,
+    "project": 0.75,
+    "education_training_certification": 0.5,
+    "no_evidence": 0.0
+  },
+  "required_requirement_weight": 10.0,
+  "optional_requirement_weight": 3.0,
+  "target_role_bonus": 5.0,
+  "required_missing_penalty": 4.0,
+  "maximum_missing_penalty": 28.0,
+  "risk_penalties": {
+    "language_mismatch": 15.0,
+    "erp_ownership_gap": 20.0,
+    "seniority_gap": 15.0,
+    "finance_direct_experience_gap": 10.0
+  },
+  "score_caps": {
+    "language_mismatch": 70.0,
+    "erp_ownership_gap": 65.0,
+    "seniority_gap": 60.0,
+    "finance_direct_experience_gap": 75.0
+  },
+  "ranking": {
+    "freshness_max_bonus": 10.0,
+    "preferred_location_bonus": 5.0,
+    "preferred_domain_bonus": 5.0,
+    "freshness_window_days": 30
+  }
+}

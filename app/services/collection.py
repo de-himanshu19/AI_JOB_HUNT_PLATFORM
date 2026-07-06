@@ -87,6 +87,7 @@ class CollectionService:
             started_at=started_at,
             config_snapshot={
                 "queries": list(request.queries),
+                "states": list(request.states),
                 "location": request.location,
                 "published_within_days": request.published_within_days,
                 "max_pages": request.max_pages,

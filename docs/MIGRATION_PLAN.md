@@ -77,6 +77,8 @@ The following decisions govern later milestones:
 
 ## Milestone 3 — EnglishJobs adapter
 
+**Implementation status:** implemented in the unified root with fixture-backed state and keyword modes, resilient HTML client behavior, same-source identity handling, safe clickout resolution, explicit completeness flags, SQLite persistence, and opt-in live mode.
+
 **Goal:** collect EnglishJobs state and optional keyword searches into the same model, including the fullest legally/technically available description.
 
 **Reuse:** intelligence state scraper/parser as base; keyword `build_search_url()` and parser metadata from `englishjobs_scraper`.
@@ -93,6 +95,8 @@ The following decisions govern later milestones:
 
 ## Milestone 4 — Normalization and cross-source duplicates
 
+**Status:** implemented and fixture-verified on 2026-07-06.
+
 **Goal:** identify the same logical vacancy across both sources while preserving source provenance.
 
 **Reuse:** intelligence stable-ID idea and all raw fields from adapters.
@@ -108,6 +112,8 @@ The following decisions govern later milestones:
 **Known limitations:** fuzzy matches cannot be perfect; human review remains necessary for gray-zone scores.
 
 ## Milestone 5 — Shared fit analysis and ranking
+
+**Status:** implemented and fixture-verified on 2026-07-06.
 
 **Goal:** score stored jobs against the candidate profile with transparent evidence and rank all sources together.
 
