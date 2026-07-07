@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–6 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, and opt-in Telegram top-20 delivery.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–7 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, and truthful FlowCV generation.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -30,8 +30,9 @@ Implemented:
 - Immutable analysis/ranking caches keyed by profile, description, and rule versions.
 - Offline Telegram preview plus explicit live send/retry with cluster-level idempotency.
 - Auditable notification batches, logical-vacancy items, and chunk delivery attempts.
+- Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validated Ollama derivatives.
 
-Not implemented yet: CV generation integration, AI calls, Streamlit pages, or legacy-data import.
+Not implemented yet: Streamlit pages, scheduling, application submission, PDF/DOCX, cover letters, OpenAI integration, or legacy-data import.
 
 ## Requirements
 
@@ -156,6 +157,22 @@ python -m app.cli notify telegram preview --profile-id <profile-id>
 Actual delivery requires `TELEGRAM_ENABLED=true`, rotated credentials, and the
 explicit `--live` flag. See [the Telegram guide](docs/TELEGRAM_NOTIFICATIONS.md)
 for selection, chunking, retry, idempotency, and audit commands.
+
+## Generate truthful CV artifacts
+
+Rule-based generation is offline and authoritative:
+
+```powershell
+python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
+python -m app.cli cv generate-manual --description-file <path> --profile-id <profile-id>
+python -m app.cli cv list --job-id <job-id>
+python -m app.cli cv show <artifact-id>
+```
+
+Stored jobs require a full description. Optional Ollama polishing requires both
+`--ai-polish` and `--live-ai`; failures retain the rule-based artifact. See
+[the CV generation guide](docs/CV_GENERATION.md) for provenance, validation,
+cache identity, and artifact-security details.
 
 ## Application lifecycle
 

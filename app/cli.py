@@ -19,6 +19,7 @@ from app.domain.duplicates import ReviewStatus
 from app.domain.enums import JobSource
 from app.logging_config import configure_logging
 from app.services.collection import CollectionService
+from app.services.cv_generation import CVGenerationService
 from app.services.analysis_rules import AnalysisRules
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
@@ -26,6 +27,7 @@ from app.services.normalization import CompanyAliases
 from app.services.notifications import NotificationFormatter, NotificationService
 from app.services.ranking import RankingService
 from app.integrations.telegram import TelegramClient
+from app.integrations.ai import OllamaProvider
 from app.sources.arbeitsagentur.adapter import ArbeitsagenturAdapter
 from app.sources.arbeitsagentur.client import (
     ArbeitsagenturClient,
@@ -146,6 +148,23 @@ def build_parser() -> argparse.ArgumentParser:
     notify_list.add_argument("--profile-id")
     notify_show = notify_commands.add_parser("show")
     notify_show.add_argument("batch_id")
+
+    cv = commands.add_parser("cv", help="Generate and inspect truthful CV artifacts")
+    cv_commands = cv.add_subparsers(dest="cv_command", required=True)
+    cv_generate = cv_commands.add_parser("generate")
+    cv_generate.add_argument("--job-id", required=True)
+    cv_generate.add_argument("--profile-id", required=True)
+    cv_generate.add_argument("--ai-polish", action="store_true")
+    cv_generate.add_argument("--live-ai", action="store_true")
+    cv_manual = cv_commands.add_parser("generate-manual")
+    cv_manual.add_argument("--description-file", type=Path, required=True)
+    cv_manual.add_argument("--profile-id", required=True)
+    cv_manual.add_argument("--ai-polish", action="store_true")
+    cv_manual.add_argument("--live-ai", action="store_true")
+    cv_list = cv_commands.add_parser("list")
+    cv_list.add_argument("--job-id")
+    cv_show = cv_commands.add_parser("show")
+    cv_show.add_argument("artifact_id")
     return parser
 
 
@@ -566,6 +585,99 @@ def _notify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _artifact_json(artifact):
+    return {
+        "artifact_id": str(artifact.id),
+        "source": artifact.source.value,
+        "generation_mode": artifact.generation_mode.value,
+        "job_id": str(artifact.job_id) if artifact.job_id else None,
+        "logical_cluster_id": (
+            str(artifact.logical_cluster_id) if artifact.logical_cluster_id else None
+        ),
+        "description_id": str(artifact.description_id) if artifact.description_id else None,
+        "description_hash": artifact.description_content_hash,
+        "profile_id": str(artifact.profile_id),
+        "profile_version": artifact.profile_version,
+        "profile_hash": artifact.profile_content_hash,
+        "analysis_id": str(artifact.analysis_id) if artifact.analysis_id else None,
+        "analyzer_version": artifact.analyzer_version,
+        "rules_version": artifact.rules_version,
+        "generator_version": artifact.generator_version,
+        "formatter_version": artifact.formatter_version,
+        "artifact_path": str(artifact.artifact_path),
+        "evidence_report_path": str(artifact.evidence_report_path),
+        "content_hash": artifact.content_hash,
+        "validated": artifact.validated,
+        "validation_result": artifact.validation_result,
+        "parent_rule_based_artifact_id": (
+            str(artifact.parent_rule_based_artifact_id)
+            if artifact.parent_rule_based_artifact_id else None
+        ),
+        "provider": artifact.provider,
+        "model": artifact.model,
+        "prompt_version": artifact.prompt_version,
+        "created_at": artifact.created_at.isoformat(),
+    }
+
+
+def _cv(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    rules = AnalysisRules.from_json(settings.fit_rules_path)
+    wants_ai = bool(getattr(args, "ai_polish", False))
+    live_ai = bool(getattr(args, "live_ai", False))
+    provider = None
+    if wants_ai and live_ai:
+        if settings.ai_provider != "rule_based":
+            provider = OllamaProvider(settings)
+    service = CVGenerationService(
+        database, settings, rules, provider=provider
+    )
+    if args.cv_command == "generate":
+        result = service.generate_for_job(
+            args.job_id, args.profile_id,
+            ai_polish=wants_ai, live_ai=live_ai,
+        )
+    elif args.cv_command == "generate-manual":
+        result = service.generate_manual_file(
+            args.description_file, args.profile_id,
+            ai_polish=wants_ai, live_ai=live_ai,
+        )
+    elif args.cv_command == "list":
+        artifacts = service.list_artifacts(args.job_id)
+        print(json.dumps(
+            [_artifact_json(item) for item in artifacts], ensure_ascii=False, indent=2
+        ))
+        return 0
+    elif args.cv_command == "show":
+        artifact, attempts = service.artifact_details(args.artifact_id)
+        output = _artifact_json(artifact)
+        output["ai_attempts"] = [
+            item.model_dump(mode="json") for item in attempts
+        ]
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+        return 0
+    else:
+        raise AssertionError("Unhandled CV command")
+
+    output = {
+        "authoritative_rule_based_artifact": _artifact_json(
+            result.rule_based_artifact
+        ),
+        "cached_artifact_reused": result.cache_hit,
+        "ai_polish_requested": wants_ai,
+        "ai_status": result.ai_status,
+        "ai_failure_category": result.ai_failure_category,
+        "ai_artifact": _artifact_json(result.ai_artifact) if result.ai_artifact else None,
+        "suggested_next_state": "cv_ready",
+        "application_status_changed": False,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "collect" and args.source == "arbeitsagentur":
@@ -584,6 +696,8 @@ def main(argv: list[str] | None = None) -> int:
         return _rank(args)
     if args.command == "notify":
         return _notify(args)
+    if args.command == "cv":
+        return _cv(args)
     raise AssertionError("Unhandled command")
 
 

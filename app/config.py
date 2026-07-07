@@ -131,6 +131,8 @@ class Settings(BaseModel):
     database_path: Path
     company_aliases_path: Path
     fit_rules_path: Path
+    cv_artifact_root: Path
+    cv_manual_max_bytes: int = Field(default=1_000_000, ge=1, le=10_000_000)
     sqlite_busy_timeout_ms: int = Field(default=5000, ge=1, le=120_000)
 
     strict_german_exclusion: bool = False
@@ -176,6 +178,7 @@ class Settings(BaseModel):
     ai_ollama_api_key: SecretStr | None = None
     ai_local_model: str = "llama3.2:3b"
     ai_cloud_model: str = "gpt-oss:20b"
+    ai_timeout_seconds: float = Field(default=120, gt=0, le=600)
 
     @model_validator(mode="after")
     def validate_enabled_features(self) -> "Settings":
@@ -238,6 +241,9 @@ def settings_from_mapping(
         root,
         _first(values, "FIT_RULES_PATH", default="config/fit_rules.json"),
     )
+    cv_artifact_root = resolve_root_path(
+        root, _first(values, "CV_ARTIFACT_ROOT", default=data_dir / "cv_artifacts")
+    )
 
     configured_queries = _first(values, "ARBEITSAGENTUR_QUERIES")
     queries = (
@@ -274,6 +280,8 @@ def settings_from_mapping(
         database_path=database_path,
         company_aliases_path=company_aliases_path,
         fit_rules_path=fit_rules_path,
+        cv_artifact_root=cv_artifact_root,
+        cv_manual_max_bytes=_first(values, "CV_MANUAL_MAX_BYTES", default="1000000"),
         sqlite_busy_timeout_ms=_first(
             values, "SQLITE_BUSY_TIMEOUT_MS", default="5000"
         ),
@@ -386,6 +394,7 @@ def settings_from_mapping(
         ),
         ai_local_model=_first(values, "AI_LOCAL_MODEL", default="llama3.2:3b"),
         ai_cloud_model=_first(values, "AI_CLOUD_MODEL", default="gpt-oss:20b"),
+        ai_timeout_seconds=_first(values, "AI_TIMEOUT_SECONDS", default="120"),
     )
 
 

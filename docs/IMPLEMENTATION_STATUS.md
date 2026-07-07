@@ -1,6 +1,6 @@
 # Implementation Status
 
-Status date: 2026-07-06
+Status date: 2026-07-07
 
 ## Completed
 
@@ -85,6 +85,17 @@ External credential rotation remains a manual security gate. No credential value
 - Concurrency tests proving pending reservations prevent duplicate external sends.
 - Migration 005 is additive and preserves migrations 001–004 plus legacy notification rows.
 
+### Migration Milestone 7
+
+- Deterministic FlowCV TXT generation by stored `job_id`, restricted to full descriptions.
+- Manual UTF-8 JD fallback with a stable input hash and no invented stored-job provenance.
+- Immutable authoritative artifacts linked to exact description, profile, analysis, rules, generator, and formatter identities.
+- Private evidence reports preserving evidence hierarchy, missing requirements, risks, and version provenance.
+- Additive migration 006 with canonical CV-generation artifacts and durable AI-attempt outcomes while preserving legacy `cv_artifacts` rows.
+- UUID-only atomic artifact storage, content-hash verification, collision protection, and cleanup after persistence failure.
+- Optional Ollama derivatives behind dual explicit opt-in; validation failure always retains the rule-based artifact.
+- CLI generate/manual/list/show workflows with no application-status mutation and no default network request.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -113,6 +124,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 4: `app/domain/duplicates.py`, `app/services/{normalization,deduplication}.py`, `migrations/003_normalization_duplicates.sql`, `config/company_aliases.json`, Milestone 4 tests/fixtures, and `docs/DUPLICATE_CLUSTERING.md`.
 - Milestone 5: generic candidate/analysis domain contracts, requirements/evidence/prefilter/fit/ranking services, `migrations/004_fit_analysis_ranking.sql`, `config/fit_rules.json`, golden tests/fixtures, and `docs/FIT_ANALYSIS.md`.
 - Milestone 6: Telegram integration/notification service, `migrations/005_telegram_notifications.sql`, notification tests, and `docs/TELEGRAM_NOTIFICATIONS.md`.
+- Milestone 7: generic CV builder/validators/storage, optional Ollama provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -134,7 +146,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **184 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 6 verification point.
+- Fixture-only pytest suite: **199 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 7 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -151,7 +163,7 @@ python -m pytest
 - EnglishJobs full-description retrieval is intentionally conservative; many listings may remain snippet-only even when a clickout destination is known.
 - Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
 - Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.
-- No CV generation is integrated; the artifact schema supports FlowCV TXT only.
+- CV generation supports FlowCV TXT only; DOCX/PDF and cover letters remain deferred.
 - Real Telegram delivery remains disabled until credentials are rotated and explicit live mode is used.
 - No Streamlit UI.
 - The database intentionally starts clean; no CSV, MySQL, or sent-history import exists.
@@ -159,4 +171,4 @@ python -m pytest
 
 ## Next recommended milestone
 
-Stop here pending approval. The next recommended milestone is Milestone 7 CV service by stored job ID.
+Stop here pending approval. The next recommended milestone is Milestone 8, the local dashboard. No Milestone 8 implementation has started.

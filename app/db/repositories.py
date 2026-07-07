@@ -12,6 +12,7 @@ from uuid import UUID
 from app.domain.application import Application, ApplicationEvent
 from app.domain.analysis import JobAnalysis, JobRanking
 from app.domain.candidate import CandidateProfile
+from app.domain.cv import CVAIAttempt, CVGenerationArtifact
 from app.domain.duplicates import (
     DuplicateCandidate,
     DuplicateCluster,
@@ -974,6 +975,147 @@ class CVArtifactRepository:
             ),
         )
         return artifact
+
+
+class CVGenerationArtifactRepository:
+    """Persistence for immutable Milestone 7 artifacts and AI attempts."""
+
+    def __init__(self, connection: sqlite3.Connection):
+        self.connection = connection
+
+    def create(self, artifact: CVGenerationArtifact) -> CVGenerationArtifact:
+        self.connection.execute(
+            """INSERT INTO cv_generation_artifacts (
+                id, job_id, logical_cluster_id, description_id,
+                description_content_hash, description_completeness, profile_id,
+                profile_version, profile_content_hash, analysis_id,
+                analyzer_version, rules_version, generator_version,
+                formatter_version, generation_mode, generation_identity,
+                artifact_format, source, parent_rule_based_artifact_id,
+                artifact_path, evidence_report_path, content_hash,
+                evidence_report_hash, provider, model, prompt_version,
+                ai_generated_at, validated, validation_result_json, created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )""",
+            (
+                str(artifact.id), str(artifact.job_id) if artifact.job_id else None,
+                str(artifact.logical_cluster_id) if artifact.logical_cluster_id else None,
+                str(artifact.description_id) if artifact.description_id else None,
+                artifact.description_content_hash, artifact.description_completeness,
+                str(artifact.profile_id), artifact.profile_version,
+                artifact.profile_content_hash,
+                str(artifact.analysis_id) if artifact.analysis_id else None,
+                artifact.analyzer_version, artifact.rules_version,
+                artifact.generator_version, artifact.formatter_version,
+                artifact.generation_mode.value, artifact.generation_identity,
+                artifact.artifact_format.value, artifact.source.value,
+                str(artifact.parent_rule_based_artifact_id)
+                if artifact.parent_rule_based_artifact_id else None,
+                str(artifact.artifact_path), str(artifact.evidence_report_path),
+                artifact.content_hash, artifact.evidence_report_hash,
+                artifact.provider, artifact.model, artifact.prompt_version,
+                _iso(artifact.ai_generated_at), int(artifact.validated),
+                _json(artifact.validation_result), _iso(artifact.created_at),
+            ),
+        )
+        return artifact
+
+    def get(self, artifact_id: UUID | str) -> CVGenerationArtifact | None:
+        row = self.connection.execute(
+            "SELECT * FROM cv_generation_artifacts WHERE id = ?", (str(artifact_id),)
+        ).fetchone()
+        return self._from_row(row) if row else None
+
+    def get_rule_based_by_identity(
+        self, generation_identity: str
+    ) -> CVGenerationArtifact | None:
+        row = self.connection.execute(
+            """SELECT * FROM cv_generation_artifacts
+            WHERE generation_identity = ? AND source = 'rule_based'""",
+            (generation_identity,),
+        ).fetchone()
+        return self._from_row(row) if row else None
+
+    def list(self, *, job_id: UUID | str | None = None) -> list[CVGenerationArtifact]:
+        if job_id is None:
+            rows = self.connection.execute(
+                "SELECT * FROM cv_generation_artifacts ORDER BY created_at DESC, id"
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """SELECT * FROM cv_generation_artifacts WHERE job_id = ?
+                ORDER BY created_at DESC, id""",
+                (str(job_id),),
+            ).fetchall()
+        return [self._from_row(row) for row in rows]
+
+    def create_ai_attempt(self, attempt: CVAIAttempt) -> CVAIAttempt:
+        self.connection.execute(
+            """INSERT INTO cv_ai_attempts (
+                id, parent_rule_based_artifact_id, derivative_artifact_id,
+                provider, model, prompt_version, status, failure_category,
+                evidence_report_path, validation_result_json, generated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(attempt.id), str(attempt.parent_rule_based_artifact_id),
+                str(attempt.derivative_artifact_id)
+                if attempt.derivative_artifact_id else None,
+                attempt.provider, attempt.model, attempt.prompt_version,
+                attempt.status.value, attempt.failure_category,
+                str(attempt.evidence_report_path),
+                _json(attempt.validation_result), _iso(attempt.generated_at),
+            ),
+        )
+        return attempt
+
+    def list_ai_attempts(self, artifact_id: UUID | str) -> list[CVAIAttempt]:
+        rows = self.connection.execute(
+            """SELECT * FROM cv_ai_attempts
+            WHERE parent_rule_based_artifact_id = ? ORDER BY generated_at DESC, id""",
+            (str(artifact_id),),
+        ).fetchall()
+        return [CVAIAttempt(
+            id=row["id"],
+            parent_rule_based_artifact_id=row["parent_rule_based_artifact_id"],
+            derivative_artifact_id=row["derivative_artifact_id"],
+            provider=row["provider"], model=row["model"],
+            prompt_version=row["prompt_version"], status=row["status"],
+            failure_category=row["failure_category"],
+            evidence_report_path=Path(row["evidence_report_path"]),
+            validation_result=json.loads(row["validation_result_json"]),
+            generated_at=_dt(row["generated_at"]),
+        ) for row in rows]
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> CVGenerationArtifact:
+        return CVGenerationArtifact(
+            id=row["id"], job_id=row["job_id"],
+            logical_cluster_id=row["logical_cluster_id"],
+            description_id=row["description_id"],
+            description_content_hash=row["description_content_hash"],
+            description_completeness=row["description_completeness"],
+            profile_id=row["profile_id"], profile_version=row["profile_version"],
+            profile_content_hash=row["profile_content_hash"],
+            analysis_id=row["analysis_id"], analyzer_version=row["analyzer_version"],
+            rules_version=row["rules_version"], generator_version=row["generator_version"],
+            formatter_version=row["formatter_version"],
+            generation_mode=row["generation_mode"],
+            generation_identity=row["generation_identity"],
+            artifact_format=row["artifact_format"], source=row["source"],
+            parent_rule_based_artifact_id=row["parent_rule_based_artifact_id"],
+            artifact_path=Path(row["artifact_path"]),
+            evidence_report_path=Path(row["evidence_report_path"]),
+            content_hash=row["content_hash"],
+            evidence_report_hash=row["evidence_report_hash"],
+            provider=row["provider"], model=row["model"],
+            prompt_version=row["prompt_version"],
+            ai_generated_at=_dt(row["ai_generated_at"]),
+            validated=bool(row["validated"]),
+            validation_result=json.loads(row["validation_result_json"]),
+            created_at=_dt(row["created_at"]),
+        )
 
 
 class DuplicateRepository:

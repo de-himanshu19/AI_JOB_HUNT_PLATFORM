@@ -149,6 +149,10 @@ The following decisions govern later milestones:
 
 ## Milestone 7 — CV service by stored `job_id`
 
+**Implementation status:** implemented in the unified root with deterministic
+FlowCV TXT, private evidence reports, exact version provenance, manual-JD
+fallback, additive migration 006, and dual-opt-in optional Ollama derivatives.
+
 **Goal:** generate a truthful tailored CV directly from a stored vacancy, with manual JD fallback.
 
 **Reuse:** CV tailor master profile, analyzer/evidence/strategy, rule-based generator, evidence report, FlowCV formatter, and AI validation/fallback.

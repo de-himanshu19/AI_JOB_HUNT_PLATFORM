@@ -88,6 +88,9 @@ AI_OLLAMA_LOCAL_URL=http://localhost:11434/api/generate
 AI_OLLAMA_CLOUD_URL=https://ollama.com/api/generate
 AI_LOCAL_MODEL=llama3.2:3b
 AI_CLOUD_MODEL=gpt-oss:20b
+AI_TIMEOUT_SECONDS=120
+CV_ARTIFACT_ROOT=data/cv_artifacts
+CV_MANUAL_MAX_BYTES=1000000
 OPENAI_API_KEY=
 
 # Temporary legacy MySQL migration only; remove after import validation
@@ -107,4 +110,3 @@ MYSQL_DATABASE=
 5. Validate required settings only when the related feature is enabled. The dashboard and rule-based CV builder must start without Telegram, MySQL, or AI credentials.
 6. Redact values whose names contain `TOKEN`, `KEY`, `SECRET`, `PASSWORD`, or `CHAT_ID` from configuration dumps and exception contexts.
 7. Rotate all credentials discovered in legacy files before the first integration run.
-

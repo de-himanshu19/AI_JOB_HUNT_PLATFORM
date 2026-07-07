@@ -13,6 +13,12 @@ from app.domain.analysis import (
 )
 from app.domain.application import Application, ApplicationEvent
 from app.domain.candidate import CandidateEvidenceProfile, CandidateProfile
+from app.domain.cv import (
+    AIAttemptStatus,
+    CVAIAttempt,
+    CVGenerationArtifact,
+    GenerationMode,
+)
 from app.domain.duplicates import (
     DuplicateCandidate,
     DuplicateCluster,
@@ -50,6 +56,8 @@ __all__ = [
     "ArtifactFormat",
     "ArtifactSource",
     "CVArtifact",
+    "CVAIAttempt",
+    "CVGenerationArtifact",
     "CandidateProfile",
     "CandidateEvidenceProfile",
     "CollectionRun",
@@ -57,6 +65,8 @@ __all__ = [
     "DescriptionCompleteness",
     "EvidenceReference",
     "EvidenceType",
+    "GenerationMode",
+    "AIAttemptStatus",
     "DuplicateCandidate",
     "DuplicateCluster",
     "DuplicateMatchMethod",
