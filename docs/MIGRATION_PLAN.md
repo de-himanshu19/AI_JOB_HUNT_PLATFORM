@@ -131,6 +131,8 @@ The following decisions govern later milestones:
 
 ## Milestone 6 — Telegram top 20
 
+**Status:** implemented and fixture-verified on 2026-07-06; real delivery remains disabled pending credential rotation and explicit live use.
+
 **Goal:** notify only the top 20 new logical vacancies after successful storage/scoring.
 
 **Reuse:** `telegram_sender.py` request shape and successful-send-only history behavior.

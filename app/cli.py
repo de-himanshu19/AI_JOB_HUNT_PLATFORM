@@ -23,7 +23,9 @@ from app.services.analysis_rules import AnalysisRules
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
 from app.services.normalization import CompanyAliases
+from app.services.notifications import NotificationFormatter, NotificationService
 from app.services.ranking import RankingService
+from app.integrations.telegram import TelegramClient
 from app.sources.arbeitsagentur.adapter import ArbeitsagenturAdapter
 from app.sources.arbeitsagentur.client import (
     ArbeitsagenturClient,
@@ -123,6 +125,27 @@ def build_parser() -> argparse.ArgumentParser:
     rank.add_argument("--rules-file", type=Path)
     rank.add_argument("--as-of", help="ISO date/time; freshness is evaluated by UTC date")
     rank.add_argument("--include-prefilter-only", action="store_true")
+
+    notify = commands.add_parser("notify", help="Preview and deliver notifications")
+    notify_commands = notify.add_subparsers(dest="notify_command", required=True)
+    telegram = notify_commands.add_parser("telegram", help="Telegram delivery workflow")
+    telegram_commands = telegram.add_subparsers(dest="telegram_command", required=True)
+    for action in ("preview", "send"):
+        command = telegram_commands.add_parser(action)
+        command.add_argument("--profile-id", required=True)
+        command.add_argument("--ranking-version")
+        command.add_argument("--duplicate-version", default=DEDUPLICATION_VERSION)
+        command.add_argument("--top-n", type=int)
+        command.add_argument("--min-rank-score", type=float)
+        if action == "send":
+            command.add_argument("--live", action="store_true", required=True)
+    retry = telegram_commands.add_parser("retry")
+    retry.add_argument("--batch-id", required=True)
+    retry.add_argument("--live", action="store_true", required=True)
+    notify_list = notify_commands.add_parser("list")
+    notify_list.add_argument("--profile-id")
+    notify_show = notify_commands.add_parser("show")
+    notify_show.add_argument("batch_id")
     return parser
 
 
@@ -450,6 +473,99 @@ def _rank(args: argparse.Namespace) -> int:
     return 0
 
 
+def _notification_json(report):
+    return {
+        "batch": (
+            report.batch.model_dump(mode="json") if report.batch else None
+        ),
+        "deliveries": [
+            item.model_dump(mode="json") for item in report.deliveries
+        ],
+    }
+
+
+def _notify(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    formatter = NotificationFormatter(settings.telegram_message_max_chars)
+
+    if args.notify_command == "list":
+        batches = NotificationService(
+            database, formatter=formatter
+        ).list_batches(args.profile_id)
+        print(json.dumps([
+            batch.model_dump(mode="json") for batch in batches
+        ], ensure_ascii=False, indent=2))
+        return 0
+    if args.notify_command == "show":
+        batch, items, deliveries = NotificationService(
+            database, formatter=formatter
+        ).batch_details(args.batch_id)
+        print(json.dumps({
+            "batch": batch.model_dump(mode="json"),
+            "items": [item.model_dump(mode="json") for item in items],
+            "deliveries": [item.model_dump(mode="json") for item in deliveries],
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.telegram_command == "preview":
+        ranking_version = args.ranking_version or AnalysisRules.from_json(
+            settings.fit_rules_path
+        ).ranking_version
+        preview = NotificationService(database, formatter=formatter).preview(
+            profile_id=args.profile_id,
+            ranking_version=ranking_version,
+            duplicate_algorithm_version=args.duplicate_version,
+            top_n=args.top_n or settings.telegram_top_n,
+            min_rank_score=(
+                args.min_rank_score
+                if args.min_rank_score is not None
+                else settings.telegram_min_rank_score
+            ),
+        )
+        print(json.dumps({
+            "mode": "preview", "network_requested": False,
+            "database_modified": False,
+            "selected_count": preview.selected_count,
+            "chunks": [
+                {"index": chunk.index, "characters": len(chunk.text), "text": chunk.text}
+                for chunk in preview.chunks
+            ],
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    if not args.live or not settings.telegram_enabled:
+        raise ValueError(
+            "Live Telegram delivery requires --live and TELEGRAM_ENABLED=true"
+        )
+    service = NotificationService(
+        database, formatter=formatter, client=TelegramClient(settings)
+    )
+    if args.telegram_command == "send":
+        ranking_version = args.ranking_version or AnalysisRules.from_json(
+            settings.fit_rules_path
+        ).ranking_version
+        report = service.send(
+            profile_id=args.profile_id,
+            ranking_version=ranking_version,
+            duplicate_algorithm_version=args.duplicate_version,
+            top_n=args.top_n or settings.telegram_top_n,
+            min_rank_score=(
+                args.min_rank_score
+                if args.min_rank_score is not None
+                else settings.telegram_min_rank_score
+            ),
+        )
+    elif args.telegram_command == "retry":
+        report = service.retry(args.batch_id)
+    else:
+        raise AssertionError("Unhandled Telegram command")
+    print(json.dumps(_notification_json(report), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "collect" and args.source == "arbeitsagentur":
@@ -466,6 +582,8 @@ def main(argv: list[str] | None = None) -> int:
         return _analysis(args)
     if args.command == "rank":
         return _rank(args)
+    if args.command == "notify":
+        return _notify(args)
     raise AssertionError("Unhandled command")
 
 

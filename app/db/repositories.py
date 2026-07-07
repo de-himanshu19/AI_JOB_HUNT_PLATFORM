@@ -18,9 +18,22 @@ from app.domain.duplicates import (
     JobDuplicateLink,
     ReviewStatus,
 )
-from app.domain.enums import ApplicationStatus, DescriptionCompleteness, JobSource
+from app.domain.enums import (
+    ApplicationStatus,
+    DescriptionCompleteness,
+    JobSource,
+    NotificationBatchStatus,
+    NotificationStatus,
+)
 from app.domain.job import Job, JobDescription
-from app.domain.operations import CVArtifact, CollectionRun, Notification
+from app.domain.operations import (
+    CVArtifact,
+    CollectionRun,
+    Notification,
+    NotificationBatch,
+    NotificationDelivery,
+    NotificationItem,
+)
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -692,6 +705,254 @@ class NotificationRepository:
             ),
         )
         return notification
+
+    def eligible_rankings(
+        self,
+        *,
+        profile_id: UUID | str,
+        ranking_version: str,
+        duplicate_algorithm_version: str,
+        min_rank_score: float,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """WITH latest AS (
+                SELECT rankings.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY rankings.cluster_id
+                           ORDER BY rankings.ranked_as_of DESC,
+                                    rankings.created_at DESC, rankings.id DESC
+                       ) AS version_row
+                FROM job_rankings AS rankings
+                WHERE rankings.profile_id = ?
+                  AND rankings.ranking_version = ?
+                  AND rankings.authority = 'authoritative'
+                  AND rankings.rank_score >= ?
+                  AND rankings.cluster_id IS NOT NULL
+            )
+            SELECT latest.*, jobs.title_raw, jobs.company_raw, jobs.location_raw,
+                   jobs.city, jobs.region, jobs.country, jobs.source_url,
+                   jobs.canonical_url, jobs.published_at, jobs.first_seen_at,
+                   jobs.title_normalized, jobs.company_normalized,
+                   analyses.fit_score, analyses.fit_reasons_json
+            FROM latest
+            JOIN duplicate_clusters AS clusters
+              ON clusters.id = latest.cluster_id
+             AND clusters.algorithm_version = ?
+             AND clusters.representative_job_id = latest.job_id
+            JOIN jobs ON jobs.id = latest.job_id AND jobs.active = 1
+            JOIN job_analyses AS analyses ON analyses.id = latest.analysis_id
+            WHERE latest.version_row = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM notification_items AS notified
+                  WHERE notified.duplicate_cluster_id = latest.cluster_id
+                    AND notified.duplicate_algorithm_version = ?
+                    AND notified.profile_id = latest.profile_id
+                    AND notified.channel = 'telegram'
+                    AND notified.status IN ('pending', 'sent')
+              )
+            ORDER BY latest.rank_score DESC,
+                     analyses.fit_score DESC,
+                     jobs.published_at DESC,
+                     jobs.first_seen_at DESC,
+                     jobs.title_normalized ASC,
+                     COALESCE(jobs.company_normalized, '') ASC,
+                     latest.cluster_id ASC
+            LIMIT ?""",
+            (
+                str(profile_id), ranking_version, min_rank_score,
+                duplicate_algorithm_version, duplicate_algorithm_version, limit,
+            ),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def create_batch(self, batch: NotificationBatch) -> NotificationBatch:
+        self.connection.execute(
+            """INSERT INTO notification_batches (
+                id, profile_id, channel, ranking_version,
+                duplicate_algorithm_version, top_n, status, selected_count,
+                chunks_total, chunks_sent, created_at, finished_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(batch.id), str(batch.profile_id), batch.channel.value,
+                batch.ranking_version, batch.duplicate_algorithm_version,
+                batch.top_n, batch.status.value, batch.selected_count,
+                batch.chunks_total, batch.chunks_sent, _iso(batch.created_at),
+                _iso(batch.finished_at),
+            ),
+        )
+        return batch
+
+    def create_delivery(
+        self, delivery: NotificationDelivery
+    ) -> NotificationDelivery:
+        self.connection.execute(
+            """INSERT INTO notification_deliveries (
+                id, batch_id, chunk_index, attempt_number, payload_hash, status,
+                remote_message_id, attempted_at, sent_at, error_summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(delivery.id), str(delivery.batch_id), delivery.chunk_index,
+                delivery.attempt_number, delivery.payload_hash,
+                delivery.status.value, delivery.remote_message_id,
+                _iso(delivery.attempted_at), _iso(delivery.sent_at),
+                delivery.error_summary,
+            ),
+        )
+        return delivery
+
+    def create_item(self, item: NotificationItem) -> NotificationItem:
+        self.connection.execute(
+            """INSERT INTO notification_items (
+                id, batch_id, delivery_id, duplicate_cluster_id,
+                duplicate_algorithm_version, representative_job_id, ranking_id,
+                profile_id, channel, position, idempotency_key, snapshot_json,
+                status, sent_at, error_summary, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(item.id), str(item.batch_id), str(item.delivery_id),
+                str(item.duplicate_cluster_id), item.duplicate_algorithm_version,
+                str(item.representative_job_id), str(item.ranking_id),
+                str(item.profile_id), item.channel.value, item.position,
+                item.idempotency_key, _json(item.snapshot), item.status.value,
+                _iso(item.sent_at), item.error_summary, _iso(item.created_at),
+            ),
+        )
+        return item
+
+    def get_batch(self, batch_id: UUID | str) -> NotificationBatch | None:
+        row = self.connection.execute(
+            "SELECT * FROM notification_batches WHERE id = ?", (str(batch_id),)
+        ).fetchone()
+        return self._batch_from_row(row) if row else None
+
+    def list_batches(self, profile_id: UUID | str | None = None) -> list[NotificationBatch]:
+        if profile_id is None:
+            rows = self.connection.execute(
+                "SELECT * FROM notification_batches ORDER BY created_at DESC, id"
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """SELECT * FROM notification_batches WHERE profile_id = ?
+                ORDER BY created_at DESC, id""",
+                (str(profile_id),),
+            ).fetchall()
+        return [self._batch_from_row(row) for row in rows]
+
+    def deliveries_for_batch(
+        self, batch_id: UUID | str, *, status: NotificationStatus | None = None
+    ) -> list[NotificationDelivery]:
+        sql = "SELECT * FROM notification_deliveries WHERE batch_id = ?"
+        values: tuple[Any, ...] = (str(batch_id),)
+        if status is not None:
+            sql += " AND status = ?"
+            values += (status.value,)
+        sql += " ORDER BY chunk_index, attempt_number"
+        return [
+            self._delivery_from_row(row)
+            for row in self.connection.execute(sql, values).fetchall()
+        ]
+
+    def items_for_batch(self, batch_id: UUID | str) -> list[NotificationItem]:
+        rows = self.connection.execute(
+            """SELECT * FROM notification_items WHERE batch_id = ?
+            ORDER BY position""",
+            (str(batch_id),),
+        ).fetchall()
+        return [self._item_from_row(row) for row in rows]
+
+    def items_for_delivery(
+        self, delivery_id: UUID | str
+    ) -> list[NotificationItem]:
+        rows = self.connection.execute(
+            """SELECT * FROM notification_items WHERE delivery_id = ?
+            ORDER BY position""",
+            (str(delivery_id),),
+        ).fetchall()
+        return [self._item_from_row(row) for row in rows]
+
+    def update_delivery(self, delivery: NotificationDelivery) -> None:
+        self.connection.execute(
+            """UPDATE notification_deliveries SET
+                status = ?, remote_message_id = ?, attempted_at = ?, sent_at = ?,
+                error_summary = ? WHERE id = ?""",
+            (
+                delivery.status.value, delivery.remote_message_id,
+                _iso(delivery.attempted_at), _iso(delivery.sent_at),
+                delivery.error_summary, str(delivery.id),
+            ),
+        )
+
+    def update_items_for_delivery(
+        self,
+        delivery_id: UUID | str,
+        *,
+        status: NotificationStatus,
+        sent_at: datetime | None,
+        error_summary: str | None,
+    ) -> None:
+        self.connection.execute(
+            """UPDATE notification_items SET status = ?, sent_at = ?,
+                error_summary = ? WHERE delivery_id = ?""",
+            (status.value, _iso(sent_at), error_summary, str(delivery_id)),
+        )
+
+    def move_failed_items_to_delivery(
+        self, old_delivery_id: UUID | str, new_delivery_id: UUID | str
+    ) -> None:
+        self.connection.execute(
+            """UPDATE notification_items SET delivery_id = ?, status = 'pending',
+                error_summary = NULL WHERE delivery_id = ? AND status = 'failed'""",
+            (str(new_delivery_id), str(old_delivery_id)),
+        )
+
+    def update_batch(self, batch: NotificationBatch) -> None:
+        self.connection.execute(
+            """UPDATE notification_batches SET status = ?, selected_count = ?,
+                chunks_total = ?, chunks_sent = ?, finished_at = ? WHERE id = ?""",
+            (
+                batch.status.value, batch.selected_count, batch.chunks_total,
+                batch.chunks_sent, _iso(batch.finished_at), str(batch.id),
+            ),
+        )
+
+    @staticmethod
+    def _batch_from_row(row: sqlite3.Row) -> NotificationBatch:
+        return NotificationBatch(
+            id=row["id"], profile_id=row["profile_id"], channel=row["channel"],
+            ranking_version=row["ranking_version"],
+            duplicate_algorithm_version=row["duplicate_algorithm_version"],
+            top_n=row["top_n"], status=row["status"],
+            selected_count=row["selected_count"], chunks_total=row["chunks_total"],
+            chunks_sent=row["chunks_sent"], created_at=_dt(row["created_at"]),
+            finished_at=_dt(row["finished_at"]),
+        )
+
+    @staticmethod
+    def _delivery_from_row(row: sqlite3.Row) -> NotificationDelivery:
+        return NotificationDelivery(
+            id=row["id"], batch_id=row["batch_id"],
+            chunk_index=row["chunk_index"], attempt_number=row["attempt_number"],
+            payload_hash=row["payload_hash"], status=row["status"],
+            remote_message_id=row["remote_message_id"],
+            attempted_at=_dt(row["attempted_at"]), sent_at=_dt(row["sent_at"]),
+            error_summary=row["error_summary"],
+        )
+
+    @staticmethod
+    def _item_from_row(row: sqlite3.Row) -> NotificationItem:
+        return NotificationItem(
+            id=row["id"], batch_id=row["batch_id"], delivery_id=row["delivery_id"],
+            duplicate_cluster_id=row["duplicate_cluster_id"],
+            duplicate_algorithm_version=row["duplicate_algorithm_version"],
+            representative_job_id=row["representative_job_id"],
+            ranking_id=row["ranking_id"], profile_id=row["profile_id"],
+            channel=row["channel"], position=row["position"],
+            idempotency_key=row["idempotency_key"],
+            snapshot=json.loads(row["snapshot_json"]), status=row["status"],
+            sent_at=_dt(row["sent_at"]), error_summary=row["error_summary"],
+            created_at=_dt(row["created_at"]),
+        )
 
 
 class CVArtifactRepository:

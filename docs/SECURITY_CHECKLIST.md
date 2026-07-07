@@ -49,6 +49,16 @@ This repository does not copy or display any discovered credential value. Rotati
 - [x] Clickout resolution records canonical destination URLs conservatively and does not fabricate full descriptions from unresolved external pages.
 - [x] Saved fixtures contain no credentials or unnecessary personal details.
 
+## Telegram notification controls
+
+- [x] Preview/list/show are offline and do not instantiate a live client.
+- [x] Send/retry require both explicit `--live` and `TELEGRAM_ENABLED=true`.
+- [x] Timeouts, bounded retries, 429/5xx, permanent 4xx, malformed responses, and transport failures use fake clients in tests.
+- [x] Tokens, chat IDs, token-bearing URLs, payloads, response bodies, and transport exception messages are absent from logs.
+- [x] Cluster-level pending/success constraints and concurrency tests prevent duplicate logical-vacancy sends.
+- [x] Partial failures retry only failed chunks and preserve successful delivery state.
+- [ ] Rotate and review Telegram credentials before any real send.
+
 ## Incident response
 
 If a secret is exposed: disable the affected feature, revoke/rotate the credential at the provider, inspect usage, remove it from current files and logs, assess repository history, and document the incident without reproducing the secret.

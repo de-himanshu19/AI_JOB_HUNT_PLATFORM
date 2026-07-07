@@ -73,6 +73,18 @@ External credential rotation remains a manual security gate. No credential value
 - Offline profile import/list/show, analyze, analysis-show, and rank CLI commands.
 - Migration 004 preserves version-003 jobs, descriptions, profiles, clusters/reviews, applications/events, analyses, and CV-artifact foreign keys.
 
+### Migration Milestone 6
+
+- Source-neutral top-20 selection from latest authoritative stored rankings and active Milestone 4 representatives.
+- Cluster/profile/channel reservation and successful-delivery idempotency across both sources.
+- Deterministic plain-text formatting and bounded Telegram-safe chunking.
+- Injected Telegram client with connect/read timeouts, bounded exponential retry, 429/5xx handling, and permanent-4xx behavior.
+- Transactional notification batches, ranked item snapshots, per-chunk attempts, safe error summaries, and remote message IDs.
+- Partial chunk failure handling and exact failed-chunk retry without resending successful chunks.
+- Offline preview/list/show commands and explicit live-only send/retry commands.
+- Concurrency tests proving pending reservations prevent duplicate external sends.
+- Migration 005 is additive and preserves migrations 001–004 plus legacy notification rows.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -100,6 +112,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Adapter documentation: `docs/ARBEITSAGENTUR_ADAPTER.md`, `docs/ENGLISHJOBS_ADAPTER.md`.
 - Milestone 4: `app/domain/duplicates.py`, `app/services/{normalization,deduplication}.py`, `migrations/003_normalization_duplicates.sql`, `config/company_aliases.json`, Milestone 4 tests/fixtures, and `docs/DUPLICATE_CLUSTERING.md`.
 - Milestone 5: generic candidate/analysis domain contracts, requirements/evidence/prefilter/fit/ranking services, `migrations/004_fit_analysis_ranking.sql`, `config/fit_rules.json`, golden tests/fixtures, and `docs/FIT_ANALYSIS.md`.
+- Milestone 6: Telegram integration/notification service, `migrations/005_telegram_notifications.sql`, notification tests, and `docs/TELEGRAM_NOTIFICATIONS.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -121,7 +134,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **161 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 5 verification point.
+- Fixture-only pytest suite: **184 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 6 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -139,11 +152,11 @@ python -m pytest
 - Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
 - Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.
 - No CV generation is integrated; the artifact schema supports FlowCV TXT only.
-- No Telegram integration; its schema exists only for later idempotency.
+- Real Telegram delivery remains disabled until credentials are rotated and explicit live mode is used.
 - No Streamlit UI.
 - The database intentionally starts clean; no CSV, MySQL, or sent-history import exists.
 - Credential rotation must be completed externally before live integrations.
 
 ## Next recommended milestone
 
-Stop here pending approval. The next recommended milestone is Milestone 6 Telegram top 20.
+Stop here pending approval. The next recommended milestone is Milestone 7 CV service by stored job ID.

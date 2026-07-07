@@ -29,10 +29,18 @@ from app.domain.enums import (
     DescriptionCompleteness,
     JobSource,
     NotificationChannel,
+    NotificationBatchStatus,
     NotificationStatus,
 )
 from app.domain.job import Job, JobDescription
-from app.domain.operations import CVArtifact, CollectionRun, Notification
+from app.domain.operations import (
+    CVArtifact,
+    CollectionRun,
+    Notification,
+    NotificationBatch,
+    NotificationDelivery,
+    NotificationItem,
+)
 
 __all__ = [
     "Application",
@@ -60,7 +68,11 @@ __all__ = [
     "JobDuplicateLink",
     "JobSource",
     "Notification",
+    "NotificationBatch",
+    "NotificationBatchStatus",
     "NotificationChannel",
+    "NotificationDelivery",
+    "NotificationItem",
     "NotificationStatus",
     "MatchDecision",
     "ReviewStatus",

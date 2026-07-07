@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–5 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, and deterministic fit analysis/ranking.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–6 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, and opt-in Telegram top-20 delivery.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -28,8 +28,10 @@ Implemented:
 - Evidence-backed full-description fit analysis with explicit missing evidence, penalties, and caps.
 - Source-neutral logical-vacancy ranking with visible components and stable ties.
 - Immutable analysis/ranking caches keyed by profile, description, and rule versions.
+- Offline Telegram preview plus explicit live send/retry with cluster-level idempotency.
+- Auditable notification batches, logical-vacancy items, and chunk delivery attempts.
 
-Not implemented yet: Telegram delivery, CV generation integration, AI calls, Streamlit pages, or legacy-data import.
+Not implemented yet: CV generation integration, AI calls, Streamlit pages, or legacy-data import.
 
 ## Requirements
 
@@ -142,6 +144,18 @@ python -m app.cli rank --profile-id <profile-id>
 Only full descriptions receive authoritative fit scores. See
 [the fit-analysis guide](docs/FIT_ANALYSIS.md) for profile schema, scoring,
 versioning, completeness policy, and deterministic ranking behavior.
+
+## Preview Telegram top matches
+
+Preview is safe and offline:
+
+```powershell
+python -m app.cli notify telegram preview --profile-id <profile-id>
+```
+
+Actual delivery requires `TELEGRAM_ENABLED=true`, rotated credentials, and the
+explicit `--live` flag. See [the Telegram guide](docs/TELEGRAM_NOTIFICATIONS.md)
+for selection, chunking, retry, idempotency, and audit commands.
 
 ## Application lifecycle
 

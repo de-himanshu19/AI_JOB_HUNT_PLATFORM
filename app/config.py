@@ -163,6 +163,14 @@ class Settings(BaseModel):
     telegram_enabled: bool = False
     telegram_bot_token: SecretStr | None = None
     telegram_chat_id: SecretStr | None = None
+    telegram_api_base_url: str = "https://api.telegram.org"
+    telegram_top_n: int = Field(default=20, ge=1, le=20)
+    telegram_min_rank_score: float = Field(default=0, ge=0)
+    telegram_message_max_chars: int = Field(default=4000, ge=500, le=4096)
+    telegram_connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    telegram_read_timeout_seconds: float = Field(default=20, gt=0, le=300)
+    telegram_max_retries: int = Field(default=3, ge=0, le=10)
+    telegram_backoff_seconds: float = Field(default=0.5, ge=0, le=60)
 
     ai_provider: str = "rule_based"
     ai_ollama_api_key: SecretStr | None = None
@@ -350,6 +358,28 @@ def settings_from_mapping(
         telegram_enabled=_first(values, "TELEGRAM_ENABLED", default="false"),
         telegram_bot_token=_first(values, "TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=_first(values, "TELEGRAM_CHAT_ID"),
+        telegram_api_base_url=_first(
+            values, "TELEGRAM_API_BASE_URL", default="https://api.telegram.org"
+        ),
+        telegram_top_n=_first(values, "TELEGRAM_TOP_N", default="20"),
+        telegram_min_rank_score=_first(
+            values, "TELEGRAM_MIN_RANK_SCORE", default="0"
+        ),
+        telegram_message_max_chars=_first(
+            values, "TELEGRAM_MESSAGE_MAX_CHARS", default="4000"
+        ),
+        telegram_connect_timeout_seconds=_first(
+            values, "TELEGRAM_CONNECT_TIMEOUT_SECONDS", default="5"
+        ),
+        telegram_read_timeout_seconds=_first(
+            values, "TELEGRAM_READ_TIMEOUT_SECONDS", default="20"
+        ),
+        telegram_max_retries=_first(
+            values, "TELEGRAM_MAX_RETRIES", default="3"
+        ),
+        telegram_backoff_seconds=_first(
+            values, "TELEGRAM_BACKOFF_SECONDS", default="0.5"
+        ),
         ai_provider=_first(values, "AI_PROVIDER", default="rule_based"),
         ai_ollama_api_key=_first(
             values, "AI_OLLAMA_API_KEY", "OLLAMA_API_KEY"

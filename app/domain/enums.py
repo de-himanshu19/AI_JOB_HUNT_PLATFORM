@@ -43,6 +43,14 @@ class NotificationStatus(StrEnum):
     FAILED = "failed"
 
 
+class NotificationBatchStatus(StrEnum):
+    PENDING = "pending"
+    SENDING = "sending"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 class ArtifactFormat(StrEnum):
     FLOWCV_TXT = "flowcv_txt"
 
@@ -50,4 +58,3 @@ class ArtifactFormat(StrEnum):
 class ArtifactSource(StrEnum):
     RULE_BASED = "rule_based"
     AI_POLISHED = "ai_polished"
-

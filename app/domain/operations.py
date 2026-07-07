@@ -14,6 +14,7 @@ from app.domain.enums import (
     CollectionRunStatus,
     JobSource,
     NotificationChannel,
+    NotificationBatchStatus,
     NotificationStatus,
 )
 
@@ -61,6 +62,59 @@ class Notification(BaseModel):
     attempted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     sent_at: datetime | None = None
     error_summary: str | None = None
+
+
+class NotificationBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    profile_id: UUID
+    channel: NotificationChannel = NotificationChannel.TELEGRAM
+    ranking_version: str = Field(min_length=1)
+    duplicate_algorithm_version: str = Field(min_length=1)
+    top_n: int = Field(default=20, ge=1, le=20)
+    status: NotificationBatchStatus = NotificationBatchStatus.PENDING
+    selected_count: int = Field(default=0, ge=0, le=20)
+    chunks_total: int = Field(default=0, ge=0)
+    chunks_sent: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    finished_at: datetime | None = None
+
+
+class NotificationDelivery(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    batch_id: UUID
+    chunk_index: int = Field(ge=1)
+    attempt_number: int = Field(default=1, ge=1)
+    payload_hash: str = Field(min_length=64, max_length=64)
+    status: NotificationStatus = NotificationStatus.PENDING
+    remote_message_id: str | None = None
+    attempted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    sent_at: datetime | None = None
+    error_summary: str | None = None
+
+
+class NotificationItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    batch_id: UUID
+    delivery_id: UUID
+    duplicate_cluster_id: UUID
+    duplicate_algorithm_version: str = Field(min_length=1)
+    representative_job_id: UUID
+    ranking_id: UUID
+    profile_id: UUID
+    channel: NotificationChannel = NotificationChannel.TELEGRAM
+    position: int = Field(ge=1, le=20)
+    idempotency_key: str = Field(min_length=64, max_length=64)
+    snapshot: dict[str, object] = Field(default_factory=dict)
+    status: NotificationStatus = NotificationStatus.PENDING
+    sent_at: datetime | None = None
+    error_summary: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class CVArtifact(BaseModel):

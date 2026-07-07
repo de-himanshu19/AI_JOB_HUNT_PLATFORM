@@ -31,6 +31,9 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
     assert settings.englishjobs_page_size == 20
     assert settings.englishjobs_max_pages == 5
     assert settings.englishjobs_states[0] == "baden_wuerttemberg"
+    assert settings.telegram_top_n == 20
+    assert settings.telegram_message_max_chars == 4000
+    assert settings.telegram_max_retries == 3
 
 
 def test_windows_safe_relative_path_resolution(tmp_path: Path) -> None:
