@@ -1,6 +1,6 @@
 # Implementation Status
 
-Status date: 2026-07-07
+Status date: 2026-07-08
 
 ## Completed
 
@@ -96,6 +96,16 @@ External credential rotation remains a manual security gate. No credential value
 - Optional Ollama derivatives behind dual explicit opt-in; validation failure always retains the rule-based artifact.
 - CLI generate/manual/list/show workflows with no application-status mutation and no default network request.
 
+### Migration Milestone 8
+
+- Optional exact-pinned Streamlit dashboard dependency and Windows-safe launcher.
+- Eight local pages covering overview, jobs, detail, duplicate review, applications, CV preparation, notifications, and runs/diagnostics.
+- Thin typed query/view-model/action layers; Streamlit pages contain no SQL, scoring, matching, lifecycle, notification, or CV rules.
+- Logical-vacancy default with explicit source-record mode, composable filters, stable sorting, and bounded pagination.
+- Explicit confirmation and rerun protections for lifecycle, duplicate, live notification, and optional AI actions.
+- Empty/populated database, Unicode, no-network, query, action, launcher, and Streamlit startup tests.
+- No migration 007; migrations 001-006 and historical records remain authoritative and readable.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -125,6 +135,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 5: generic candidate/analysis domain contracts, requirements/evidence/prefilter/fit/ranking services, `migrations/004_fit_analysis_ranking.sql`, `config/fit_rules.json`, golden tests/fixtures, and `docs/FIT_ANALYSIS.md`.
 - Milestone 6: Telegram integration/notification service, `migrations/005_telegram_notifications.sql`, notification tests, and `docs/TELEGRAM_NOTIFICATIONS.md`.
 - Milestone 7: generic CV builder/validators/storage, optional Ollama provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
+- Milestone 8: `app/dashboard`, optional Streamlit extra/launcher, dashboard tests, `.streamlit/config.toml`, and `docs/DASHBOARD.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -146,7 +157,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **199 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 7 verification point.
+- Fixture-only pytest suite: **214 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 8 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -165,10 +176,10 @@ python -m pytest
 - Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.
 - CV generation supports FlowCV TXT only; DOCX/PDF and cover letters remain deferred.
 - Real Telegram delivery remains disabled until credentials are rotated and explicit live mode is used.
-- No Streamlit UI.
+- Dashboard is local and single-user; no authentication or cloud deployment exists.
 - The database intentionally starts clean; no CSV, MySQL, or sent-history import exists.
 - Credential rotation must be completed externally before live integrations.
 
 ## Next recommended milestone
 
-Stop here pending approval. The next recommended milestone is Milestone 8, the local dashboard. No Milestone 8 implementation has started.
+Stop here pending approval. Milestone 9 legacy import remains unstarted and outside the current scope.

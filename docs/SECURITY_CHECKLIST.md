@@ -59,6 +59,17 @@ This repository does not copy or display any discovered credential value. Rotati
 - [x] Partial failures retry only failed chunks and preserve successful delivery state.
 - [ ] Rotate and review Telegram credentials before any real send.
 
+## Local dashboard controls
+
+- [x] Dashboard startup and page browsing require no API key or integration credential.
+- [x] Automated page tests fail if a `requests.Session` attempts an external request.
+- [x] Streamlit usage telemetry is disabled in local configuration and the launcher.
+- [x] Pages contain no SQL or duplicated business rules; mutations call existing services.
+- [x] Live Telegram and AI controls are disabled by safe defaults and require layered confirmation.
+- [x] Full descriptions load only for selected detail views, not job-table rows.
+- [x] Secrets, prompts, CV/JD text, payloads, and provider responses are excluded from diagnostics.
+- [x] Original vacancy links open only through an explicit user click.
+
 ## Incident response
 
 If a secret is exposed: disable the affected feature, revoke/rotate the credential at the provider, inspect usage, remove it from current files and logs, assess repository history, and document the incident without reproducing the secret.

@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–7 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, and truthful FlowCV generation.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–8 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, and an optional local Streamlit dashboard.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -31,8 +31,9 @@ Implemented:
 - Offline Telegram preview plus explicit live send/retry with cluster-level idempotency.
 - Auditable notification batches, logical-vacancy items, and chunk delivery attempts.
 - Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validated Ollama derivatives.
+- Optional local dashboard for source-neutral review, lifecycle tracking, duplicate decisions, CV preparation, notification history, and safe diagnostics.
 
-Not implemented yet: Streamlit pages, scheduling, application submission, PDF/DOCX, cover letters, OpenAI integration, or legacy-data import.
+Not implemented yet: scheduling, application submission, PDF/DOCX, cover letters, OpenAI integration, or legacy-data import.
 
 ## Requirements
 
@@ -77,6 +78,19 @@ python -m pytest
 ```
 
 Tests use temporary SQLite databases and fixtures only. They do not call Arbeitsagentur, EnglishJobs, Telegram, OpenAI, Ollama, or MySQL.
+
+## Launch the local dashboard
+
+Install the optional dashboard dependency and launch from the repository root:
+
+```powershell
+python -m pip install -e ".[dashboard,test]"
+python -m app.dashboard
+```
+
+Opening the dashboard is passive and requires no integration credentials. See
+[the dashboard guide](docs/DASHBOARD.md) for pages, confirmation gates, caching,
+logical-vacancy behavior, and Windows launch details.
 
 ## Arbeitsagentur fixture dry run
 

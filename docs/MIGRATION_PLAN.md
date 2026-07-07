@@ -169,6 +169,10 @@ fallback, additive migration 006, and dual-opt-in optional Ollama derivatives.
 
 ## Milestone 8 — Streamlit dashboard
 
+**Implementation status:** implemented as an optional local dashboard with a
+thin query/action layer, passive no-network startup, eight review/operations
+pages, and no migration 007.
+
 **Goal:** expose jobs, filters, details, statuses, runs, notifications, and CV Builder in one local UI.
 
 **Reuse:** CV tailor’s Streamlit interaction patterns and result presentation, not its monolithic script.
