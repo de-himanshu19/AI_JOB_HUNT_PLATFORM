@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import socket
+import subprocess
+import sys
+import time
 
 import pytest
 import requests
@@ -28,6 +33,28 @@ ROOT = Path(__file__).parents[2]
 APP = ROOT / "app" / "dashboard" / "Home.py"
 
 
+def _unused_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return listener.getsockname()[1]
+
+
+def _offline_environment(tmp_path: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update({
+        "JOBHUNT_DATABASE_PATH": str(tmp_path / "dashboard.sqlite3"),
+        "FIT_RULES_PATH": str(ROOT / "config" / "fit_rules.json"),
+        "DEDUP_COMPANY_ALIASES_PATH": str(ROOT / "config" / "company_aliases.json"),
+        "TELEGRAM_ENABLED": "false",
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_CHAT_ID": "",
+        "AI_PROVIDER": "rule_based",
+        "AI_OLLAMA_API_KEY": "",
+        "PYTHONUNBUFFERED": "1",
+    })
+    return environment
+
+
 def _run(monkeypatch, tmp_path):
     monkeypatch.setenv("JOBHUNT_DATABASE_PATH", str(tmp_path / "dashboard.sqlite3"))
     monkeypatch.setenv("FIT_RULES_PATH", str(ROOT / "config" / "fit_rules.json"))
@@ -50,6 +77,58 @@ def test_empty_database_starts_without_credentials_or_exceptions(monkeypatch, tm
     assert app.title[0].value == "Overview"
     assert any("No collection runs" in item.value for item in app.info)
     assert (tmp_path / "dashboard.sqlite3").exists()
+
+
+def test_absolute_home_path_starts_streamlit_without_import_shadowing(tmp_path) -> None:
+    port = _unused_port()
+    command = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(APP.resolve()),
+        "--server.headless=true",
+        "--browser.gatherUsageStats=false",
+        "--server.address=127.0.0.1",
+        f"--server.port={port}",
+    ]
+    process = subprocess.Popen(
+        command,
+        cwd=tmp_path,
+        env=_offline_environment(tmp_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    logs = ""
+    try:
+        health_url = f"http://127.0.0.1:{port}/_stcore/health"
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            try:
+                response = requests.get(health_url, timeout=0.5)
+                if response.status_code == 200:
+                    break
+            except requests.RequestException:
+                time.sleep(0.1)
+        else:
+            pytest.fail("Streamlit health endpoint did not become ready")
+
+        assert process.poll() is None
+        assert response.status_code == 200
+        assert requests.get(f"http://127.0.0.1:{port}/", timeout=2).status_code == 200
+    finally:
+        process.terminate()
+        try:
+            logs = process.communicate(timeout=10)[0]
+        except subprocess.TimeoutExpired:
+            process.kill()
+            logs = process.communicate(timeout=5)[0]
+
+    assert "'app' is not a package" not in logs
+    assert "ModuleNotFoundError" not in logs
 
 
 def test_startup_and_browsing_make_no_external_request(monkeypatch, tmp_path) -> None:
