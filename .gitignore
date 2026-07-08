@@ -26,6 +26,7 @@ venv/
 data/*.sqlite3
 data/*.sqlite3-*
 data/artifacts/
+data/pipeline_runs/
 logs/
 *.db
 *.sqlite

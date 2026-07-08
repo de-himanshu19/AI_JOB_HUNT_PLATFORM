@@ -28,6 +28,7 @@ from app.services.fit_analysis import FitAnalysisService
 from app.services.legacy_import import LegacyImportService
 from app.services.normalization import CompanyAliases
 from app.services.notifications import NotificationFormatter, NotificationService
+from app.services.pipeline import PipelineRunRequest, PipelineService
 from app.services.ranking import RankingService
 from app.integrations.telegram import TelegramClient
 from app.integrations.ai import OllamaProvider
@@ -212,6 +213,30 @@ def build_parser() -> argparse.ArgumentParser:
     legacy_show.add_argument("batch_id")
     legacy_verify = legacy_commands.add_parser("verify")
     legacy_verify.add_argument("batch_id")
+
+    pipeline = commands.add_parser(
+        "pipeline", help="Run safe local one-command workflow orchestration"
+    )
+    pipeline_commands = pipeline.add_subparsers(
+        dest="pipeline_command", required=True
+    )
+    pipeline_run = pipeline_commands.add_parser("run")
+    pipeline_run.add_argument("--profile-id", required=True)
+    pipeline_run.add_argument("--query", default="Data Analyst")
+    pipeline_run.add_argument("--location", default="Deutschland")
+    pipeline_run.add_argument(
+        "--source",
+        action="append",
+        help="Repeatable or comma-separated: arbeitsagentur, englishjobs",
+    )
+    pipeline_run.add_argument("--max-pages", type=int, default=1)
+    pipeline_run.add_argument("--page-size", type=int, default=10)
+    pipeline_run.add_argument("--top-n", type=int, default=10)
+    pipeline_run.add_argument("--live-collect", action="store_true")
+    pipeline_run.add_argument("--preview-notification", action="store_true")
+    pipeline_run.add_argument("--include-prefilter-only", action="store_true")
+    pipeline_run.add_argument("--output", type=Path)
+    pipeline_run.add_argument("--no-dashboard-hint", action="store_true")
     return parser
 
 
@@ -228,6 +253,27 @@ def _legacy_source_choices() -> list[str]:
 
 def _legacy_source(value: str) -> LegacySourceType:
     return LegacySourceType(value.replace("-", "_"))
+
+
+def _pipeline_sources(values: list[str] | None) -> tuple[JobSource, ...]:
+    raw = values or [JobSource.ARBEITSAGENTUR.value]
+    normalized: list[JobSource] = []
+    for value in raw:
+        for part in value.split(","):
+            source = part.strip().casefold()
+            if not source:
+                continue
+            try:
+                parsed = JobSource(source)
+            except ValueError as error:
+                raise ValueError(f"Invalid pipeline source: {part.strip()}") from error
+            if parsed not in {JobSource.ARBEITSAGENTUR, JobSource.ENGLISHJOBS}:
+                raise ValueError(f"Invalid pipeline source: {part.strip()}")
+            if parsed not in normalized:
+                normalized.append(parsed)
+    if not normalized:
+        raise ValueError("At least one pipeline source is required")
+    return tuple(normalized)
 
 
 def _description_completeness_counts(result) -> dict[str, int]:
@@ -896,6 +942,38 @@ def _legacy(args: argparse.Namespace) -> int:
     raise AssertionError("Unhandled legacy command")
 
 
+def _pipeline(args: argparse.Namespace) -> int:
+    if args.pipeline_command != "run":
+        raise AssertionError("Unhandled pipeline command")
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    rules = AnalysisRules.from_json(settings.fit_rules_path)
+    service = PipelineService(
+        database,
+        settings,
+        rules,
+        aliases=CompanyAliases.from_json(settings.company_aliases_path),
+    )
+    summary = service.run(PipelineRunRequest(
+        profile_id=args.profile_id,
+        query=args.query,
+        location=args.location,
+        sources=_pipeline_sources(args.source),
+        max_pages=args.max_pages,
+        page_size=args.page_size,
+        top_n=args.top_n,
+        live_collect=args.live_collect,
+        preview_notification=args.preview_notification,
+        include_prefilter_only=args.include_prefilter_only,
+        output_path=args.output,
+        dashboard_hint=not args.no_dashboard_hint,
+    ))
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "collect" and args.source == "arbeitsagentur":
@@ -920,6 +998,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cv(args)
     if args.command == "legacy":
         return _legacy(args)
+    if args.command == "pipeline":
+        return _pipeline(args)
     raise AssertionError("Unhandled command")
 
 

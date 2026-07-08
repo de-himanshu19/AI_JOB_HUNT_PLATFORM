@@ -33,6 +33,7 @@ Implemented:
 - Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validated Ollama derivatives.
 - Optional local dashboard for source-neutral review, lifecycle tracking, duplicate decisions, CV preparation, notification history, and safe diagnostics.
 - Additive legacy import audit tables, verified SQLite backup gate, local CSV/JSON/TXT importers, fixture-only MySQL reader boundary, and conservative notification-history mapping.
+- Safe one-command local pipeline orchestration for collection, deduplication, analysis, ranking, notification preview, top-job display, and JSON summaries.
 
 Not implemented yet: scheduling, application submission, PDF/DOCX, cover letters, OpenAI integration, real MySQL import, or destructive legacy cleanup.
 
@@ -160,6 +161,24 @@ python -m app.cli rank --profile-id <profile-id>
 Only full descriptions receive authoritative fit scores. See
 [the fit-analysis guide](docs/FIT_ANALYSIS.md) for profile schema, scoring,
 versioning, completeness policy, and deterministic ranking behavior.
+
+## Run the safe pipeline
+
+The pipeline orchestrates the existing workflow and writes a JSON summary:
+
+```powershell
+python -m app.cli pipeline run `
+  --profile-id <profile-id> `
+  --query "Data Analyst" `
+  --location Deutschland `
+  --source arbeitsagentur `
+  --top-n 10 `
+  --preview-notification
+```
+
+Without `--live-collect`, no external job-source request is made. See
+[the pipeline guide](docs/PIPELINE.md) for live collection, output files, and
+daily workflow examples.
 
 ## Preview Telegram top matches
 
