@@ -37,12 +37,14 @@ def overview_page() -> None:
     view = cached_overview(
         str(context.database.path), context.database.busy_timeout_ms, profile_id or ""
     )
-    columns = st.columns(5)
+    columns = st.columns(7)
     metrics = (
         ("Logical vacancies", view.logical_vacancies),
         ("Active source jobs", view.active_source_jobs),
         ("Authoritative analyses", view.authoritative_analyses),
-        ("Ranked vacancies", view.ranked_vacancies),
+        ("Preliminary analyses", view.preliminary_analyses),
+        ("Authoritative rankings", view.ranked_vacancies),
+        ("Preliminary rankings", view.preliminary_rankings),
         ("Duplicate reviews", view.pending_duplicate_reviews),
     )
     for column, (label, value) in zip(columns, metrics):

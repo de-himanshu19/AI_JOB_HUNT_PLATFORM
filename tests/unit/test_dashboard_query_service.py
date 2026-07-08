@@ -66,6 +66,10 @@ def test_empty_dashboard_queries_return_useful_empty_views(database: Database) -
     overview = service.overview()
     assert overview.active_source_jobs == 0
     assert overview.logical_vacancies == 0
+    assert overview.authoritative_analyses == 0
+    assert overview.preliminary_analyses == 0
+    assert overview.ranked_vacancies == 0
+    assert overview.preliminary_rankings == 0
     assert service.jobs(JobFilters()).items == ()
     assert service.profiles() == ()
     assert service.runs() == ()
@@ -112,4 +116,3 @@ def test_sort_whitelist_ignores_unknown_sort_expression(database: Database) -> N
     assert result.total == 1
     with database.read_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
-

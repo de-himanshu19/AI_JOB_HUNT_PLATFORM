@@ -163,7 +163,8 @@ def test_populated_database_overview_renders_stored_metrics(monkeypatch, tmp_pat
     metrics = {item.label: item.value for item in app.metric}
     assert metrics["Logical vacancies"] == "2"
     assert metrics["Active source jobs"] == "2"
-    assert metrics["Ranked vacancies"] == "2"
+    assert metrics["Authoritative rankings"] == "2"
+    assert metrics["Preliminary rankings"] == "0"
 
 
 def test_session_action_token_prevents_duplicate_rerun_submission() -> None:

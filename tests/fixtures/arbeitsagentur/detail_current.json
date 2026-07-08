@@ -1,0 +1,26 @@
+{
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Data Analyst",
+  "stellenangebotsBeschreibung": "Wir suchen Unterstützung für die Analyse betrieblicher Daten. Zu den Aufgaben gehören SQL-Auswertungen, belastbare Dashboards und dokumentierte Qualitätsprüfungen. Sie arbeiten mit internationalen Fachbereichen und kommunizieren Ergebnisse auf Englisch.",
+  "arbeitszeitVollzeit": true,
+  "eintrittszeitraum": {
+    "von": "2026-08-01"
+  },
+  "vertragsdauer": "unbefristet",
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "plz": "10115",
+        "ort": "Berlin",
+        "region": "Berlin",
+        "land": "Deutschland"
+      },
+      "breite": 52.5,
+      "laenge": 13.4
+    }
+  ],
+  "datumErsteVeroeffentlichung": "2026-07-01",
+  "hauptberuf": "Datenanalyst/in",
+  "firma": "Beispiel Analyse GmbH",
+  "referenznummer": "CURRENT-REF-100"
+}

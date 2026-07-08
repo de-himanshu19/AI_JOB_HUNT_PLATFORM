@@ -119,6 +119,39 @@ def test_mutable_fields_update_and_description_versions(settings, database):
         assert "Changed" in JobDescriptionRepository(connection).latest_for_job(job.id).raw_text
 
 
+class CurrentDetailFixtureClient:
+    def search(self, query, **kwargs):
+        return {
+            "maxErgebnisse": 1,
+            "ergebnisliste": [{
+                "referenznummer": "CURRENT-REF-100",
+                "stellenangebotsTitel": "Data Analyst",
+                "firma": "Beispiel Analyse GmbH",
+            }],
+        }
+
+    def fetch_details(self, source_job_id, url=None):
+        return json.loads((FIXTURES / "detail_current.json").read_text(encoding="utf-8"))
+
+
+def test_current_live_like_detail_persists_as_full(settings, database):
+    report = CollectionService(database).execute(
+        _adapter(settings, CurrentDetailFixtureClient()),
+        _request(),
+        source=JobSource.ARBEITSAGENTUR,
+    )
+    assert report.description_versions_inserted == 1
+    with database.read_connection() as connection:
+        row = connection.execute(
+            """SELECT d.completeness, d.raw_text FROM jobs j
+            JOIN job_descriptions d ON d.job_id = j.id
+            WHERE j.source = 'arbeitsagentur' AND j.source_job_id = ?""",
+            ("CURRENT-REF-100",),
+        ).fetchone()
+    assert row["completeness"] == "full"
+    assert "SQL-Auswertungen" in row["raw_text"]
+
+
 class PartialFixtureClient(FixtureArbeitsagenturClient):
     def fetch_details(self, source_job_id, url=None):
         if source_job_id == "REF-200":
@@ -240,5 +273,47 @@ def test_cli_fixture_dry_run_is_safe(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert output["mode"] == "dry-run"
     assert output["jobs_collected"] == 2
+    assert output["description_completeness"] == {
+        "full": 1, "snippet": 1, "missing": 0
+    }
     assert output["database_modified"] is False
     assert not settings.database_path.exists()
+
+
+def test_live_diagnostic_reports_shape_without_payload_values_or_logs(
+    monkeypatch, settings, capsys, caplog
+):
+    secret_description = "PRIVATE-LIVE-DESCRIPTION " * 4
+
+    class DiagnosticClient:
+        def __init__(self, configured_settings):
+            assert configured_settings is settings
+
+        def search(self, query, **kwargs):
+            return {
+                "maxErgebnisse": 1,
+                "ergebnisliste": [{
+                    "referenznummer": "PRIVATE-REFERENCE",
+                    "stellenangebotsTitel": "Private title",
+                }],
+            }
+
+        def fetch_details(self, source_job_id, url=None):
+            return {"stellenangebotsBeschreibung": secret_description}
+
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr(cli, "ArbeitsagenturClient", DiagnosticClient)
+    exit_code = cli.main([
+        "diagnose", "arbeitsagentur-detail", "--query", "Data Analyst", "--live"
+    ])
+    output_text = capsys.readouterr().out
+    output = json.loads(output_text)
+    assert exit_code == 0
+    assert output["payload_values_included"] is False
+    assert output["description_extracted"] is True
+    assert output["payload_shape"]["fields"]["stellenangebotsBeschreibung"] == {
+        "type": "str", "length": len(secret_description)
+    }
+    assert secret_description.strip() not in output_text
+    assert "PRIVATE-REFERENCE" not in output_text
+    assert secret_description.strip() not in caplog.text

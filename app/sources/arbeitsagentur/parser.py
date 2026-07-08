@@ -142,6 +142,29 @@ def _first(mapping: Mapping[str, Any], *keys: str) -> Any:
     return None
 
 
+def _description_text(value: Any) -> str | None:
+    """Extract text from known scalar or wrapped description representations."""
+    direct = _text(value)
+    if direct:
+        return direct
+    if isinstance(value, Mapping):
+        for key in (
+            "inhalt",
+            "text",
+            "beschreibung",
+            "stellenbeschreibung",
+            "stellenangebotsBeschreibung",
+        ):
+            if key in value:
+                nested = _description_text(value[key])
+                if nested:
+                    return nested
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes, Mapping)):
+        parts = tuple(filter(None, (_description_text(item) for item in value)))
+        return "\n".join(dict.fromkeys(parts)) or None
+    return None
+
+
 def _address_from_summary(record: Mapping[str, Any]) -> dict[str, str | None]:
     locations = record.get("stellenlokationen")
     if not isinstance(locations, list) or not locations:
@@ -305,8 +328,14 @@ def parse_job_details(
     if not payload:
         return RawJobDetails(source_job_id=source_job_id, source_url=source_url)
 
-    description = _text(
-        _first(payload, "stellenbeschreibung", "beschreibung", "jobDescription")
+    description = _description_text(
+        _first(
+            payload,
+            "stellenangebotsBeschreibung",
+            "stellenbeschreibung",
+            "beschreibung",
+            "jobDescription",
+        )
     )
     responsibilities = _string_items(
         _first(payload, "aufgaben", "taetigkeiten", "aufgabenUndTaetigkeiten")
@@ -404,4 +433,3 @@ def parse_job_details(
         language_signals=signals,
         structured_data=structured_data,
     )
-

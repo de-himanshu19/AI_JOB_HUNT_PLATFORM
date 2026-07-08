@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +35,9 @@ from app.sources.arbeitsagentur.adapter import ArbeitsagenturAdapter
 from app.sources.arbeitsagentur.client import (
     ArbeitsagenturClient,
     FixtureArbeitsagenturClient,
+    summarize_payload_shape,
 )
+from app.sources.arbeitsagentur.parser import parse_job_details, parse_search_page
 from app.sources.englishjobs.adapter import EnglishJobsAdapter
 from app.sources.englishjobs.client import (
     EnglishJobsClient,
@@ -70,6 +73,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Fixture directory for offline dry-run mode",
     )
+
+    diagnose = commands.add_parser(
+        "diagnose", help="Run explicitly enabled, value-safe integration diagnostics"
+    )
+    diagnose_commands = diagnose.add_subparsers(
+        dest="diagnose_command", required=True
+    )
+    aa_detail = diagnose_commands.add_parser(
+        "arbeitsagentur-detail", help="Show one detail payload's structure, not values"
+    )
+    aa_detail.add_argument("--query", required=True)
+    aa_detail.add_argument("--location")
+    aa_detail.add_argument("--published-within-days", type=int)
+    aa_detail.add_argument("--live", action="store_true", required=True)
 
     duplicates = commands.add_parser(
         "deduplicate", help="Normalize and review stored duplicate clusters"
@@ -211,6 +228,13 @@ def _legacy_source(value: str) -> LegacySourceType:
     return LegacySourceType(value.replace("-", "_"))
 
 
+def _description_completeness_counts(result) -> dict[str, int]:
+    counts = Counter(
+        collected.description.completeness.value for collected in result.jobs
+    )
+    return {key: counts.get(key, 0) for key in ("full", "snippet", "missing")}
+
+
 def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging(settings)
@@ -266,6 +290,7 @@ def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
                 "would_or_did_insert": report.jobs_inserted,
                 "would_or_did_update": report.jobs_updated,
                 "description_versions_inserted": report.description_versions_inserted,
+                "description_completeness": _description_completeness_counts(result),
                 "queries_executed": result.queries_executed,
                 "states_executed": result.states_executed,
                 "pages_requested": result.pages_requested,
@@ -345,6 +370,7 @@ def _collect_englishjobs(args: argparse.Namespace) -> int:
                 "would_or_did_insert": report.jobs_inserted,
                 "would_or_did_update": report.jobs_updated,
                 "description_versions_inserted": report.description_versions_inserted,
+                "description_completeness": _description_completeness_counts(result),
                 "queries_executed": result.queries_executed,
                 "states_executed": result.states_executed,
                 "pages_requested": result.pages_requested,
@@ -363,6 +389,52 @@ def _collect_englishjobs(args: argparse.Namespace) -> int:
         )
     )
     return 1 if result.status is SourceRunStatus.FAILED else 0
+
+
+def _diagnose(args: argparse.Namespace) -> int:
+    if args.diagnose_command != "arbeitsagentur-detail":
+        raise AssertionError("Unhandled diagnostic command")
+    settings = get_settings()
+    configure_logging(settings)
+    client = ArbeitsagenturClient(settings)
+    query = args.query.strip()
+    location = args.location or settings.arbeitsagentur_location
+    published_within_days = (
+        args.published_within_days
+        if args.published_within_days is not None
+        else settings.arbeitsagentur_published_within_days
+    )
+    search_payload = client.search(
+        query,
+        location=location,
+        page=1,
+        page_size=1,
+        published_within_days=published_within_days,
+    )
+    page = parse_search_page(
+        search_payload,
+        search_term=query,
+        detail_base_url=settings.arbeitsagentur_detail_url,
+    )
+    if not page.jobs:
+        print(json.dumps({"status": "no_results", "live_request": True}, indent=2))
+        return 1
+    summary = page.jobs[0]
+    payload = client.fetch_details(summary.source_job_id, summary.source_detail_url)
+    details = parse_job_details(
+        payload,
+        source_job_id=summary.source_job_id,
+        source_url=summary.source_detail_url,
+    )
+    print(json.dumps({
+        "status": "ok",
+        "live_request": True,
+        "payload_values_included": False,
+        "description_extracted": bool(details.description),
+        "description_length": len(details.description or ""),
+        "payload_shape": summarize_payload_shape(payload),
+    }, ensure_ascii=True, indent=2))
+    return 0
 
 
 def _deduplicate(args: argparse.Namespace) -> int:
@@ -824,6 +896,8 @@ def main(argv: list[str] | None = None) -> int:
         return _collect_arbeitsagentur(args)
     if args.command == "collect" and args.source == "englishjobs":
         return _collect_englishjobs(args)
+    if args.command == "diagnose":
+        return _diagnose(args)
     if args.command == "deduplicate":
         return _deduplicate(args)
     if args.command == "profile":

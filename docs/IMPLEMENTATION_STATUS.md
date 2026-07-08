@@ -184,7 +184,10 @@ python -m pytest
 
 - Fuzzy duplicate matches cannot be perfect; conservative gray-zone candidates require human review.
 - Description-language detection and explicit language signals are metadata only; penalties/ranking are deferred.
-- The detail parser is fixture-verified but the external API contract can still change; live smoke testing remains opt-in.
+- The Arbeitsagentur detail parser supports the current `stellenangebotsBeschreibung`
+  field plus legacy description aliases; the value-safe
+  `diagnose arbeitsagentur-detail --live` command reports only field shapes and
+  lengths when future contract drift must be investigated.
 - EnglishJobs full-description retrieval is intentionally conservative; many listings may remain snippet-only even when a clickout destination is known.
 - Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
 - Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.

@@ -71,9 +71,19 @@ class DashboardQueryService:
                 WHERE authority = 'authoritative'
                 AND (? = '' OR profile_id = ?)""", (profile, profile),
             ).fetchone()[0]
+            preliminary_analyses = connection.execute(
+                """SELECT COUNT(DISTINCT job_id) FROM job_analyses
+                WHERE authority != 'authoritative'
+                AND (? = '' OR profile_id = ?)""", (profile, profile),
+            ).fetchone()[0]
             rankings = connection.execute(
                 """SELECT COUNT(DISTINCT COALESCE(cluster_id, job_id)) FROM job_rankings
                 WHERE authority = 'authoritative'
+                AND (? = '' OR profile_id = ?)""", (profile, profile),
+            ).fetchone()[0]
+            preliminary_rankings = connection.execute(
+                """SELECT COUNT(DISTINCT COALESCE(cluster_id, job_id))
+                FROM job_rankings WHERE authority != 'authoritative'
                 AND (? = '' OR profile_id = ?)""", (profile, profile),
             ).fetchone()[0]
             pending = connection.execute(
@@ -115,6 +125,8 @@ class DashboardQueryService:
         return OverviewView(
             active_source_jobs=int(active), logical_vacancies=int(logical),
             authoritative_analyses=int(analyses), ranked_vacancies=int(rankings),
+            preliminary_analyses=int(preliminary_analyses),
+            preliminary_rankings=int(preliminary_rankings),
             pending_duplicate_reviews=int(pending),
             application_counts={row["status"]: row["count"] for row in application_rows},
             recent_runs=tuple(dict(row) for row in runs),

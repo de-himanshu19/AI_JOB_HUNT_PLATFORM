@@ -46,6 +46,33 @@ class ResponseFormatError(ArbeitsagenturClientError):
     pass
 
 
+def summarize_payload_shape(value: Any, *, max_depth: int = 4) -> dict[str, Any]:
+    """Describe JSON structure without exposing any response values."""
+
+    def summarize(item: Any, depth: int) -> dict[str, Any]:
+        if isinstance(item, dict):
+            if depth >= max_depth:
+                return {"type": "object", "field_count": len(item)}
+            return {
+                "type": "object",
+                "fields": {
+                    str(key): summarize(child, depth + 1)
+                    for key, child in item.items()
+                },
+            }
+        if isinstance(item, list):
+            result: dict[str, Any] = {"type": "array", "item_count": len(item)}
+            if item and depth < max_depth:
+                result["sample_item_shape"] = summarize(item[0], depth + 1)
+            return result
+        result = {"type": type(item).__name__}
+        if isinstance(item, str):
+            result["length"] = len(item)
+        return result
+
+    return summarize(value, 0)
+
+
 def encode_ref_number(reference: str) -> str:
     encoded = base64.urlsafe_b64encode(reference.encode("utf-8")).decode("ascii")
     return encoded.rstrip("=")

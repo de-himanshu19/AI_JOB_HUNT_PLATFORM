@@ -105,6 +105,32 @@ def test_full_detail_sections_urls_employment_and_language_signals():
     assert detail.language_signals.english_signal is True
 
 
+def test_current_detail_response_extracts_full_description_field():
+    detail = parse_job_details(
+        _fixture("detail_current.json"),
+        source_job_id="CURRENT-REF-100",
+        source_url="https://detail.invalid/current",
+    )
+    assert "SQL-Auswertungen" in detail.description
+    assert "Job Description" in detail.description
+    assert detail.language_signals.english_signal is True
+
+
+def test_wrapped_description_and_legacy_description_are_both_supported():
+    wrapped = parse_job_details(
+        {"stellenangebotsBeschreibung": {"inhalt": "Complete wrapped description " * 3}},
+        source_job_id="WRAPPED",
+        source_url="https://detail.invalid/wrapped",
+    )
+    legacy = parse_job_details(
+        {"stellenbeschreibung": "Complete legacy description " * 3},
+        source_job_id="LEGACY",
+        source_url="https://detail.invalid/legacy",
+    )
+    assert "wrapped" in wrapped.description
+    assert "legacy" in legacy.description
+
+
 def test_customer_facing_signal_does_not_exclude_or_fail_parsing():
     signals = extract_language_signals(
         "Direkter Kundenkontakt und Kundenberatung. Fluent English is useful."
@@ -137,4 +163,3 @@ def test_malformed_detail_structure():
         parse_job_details(
             [], source_job_id="REF-BAD", source_url="https://detail.invalid/ref"
         )
-

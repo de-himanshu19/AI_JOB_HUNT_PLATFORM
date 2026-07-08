@@ -78,6 +78,8 @@ class OverviewView:
     logical_vacancies: int
     authoritative_analyses: int
     ranked_vacancies: int
+    preliminary_analyses: int
+    preliminary_rankings: int
     pending_duplicate_reviews: int
     application_counts: dict[str, int] = field(default_factory=dict)
     recent_runs: tuple[dict[str, object], ...] = ()
@@ -104,4 +106,3 @@ class DuplicateReviewView:
     candidate: dict[str, object]
     left_job: dict[str, object]
     right_job: dict[str, object]
-
