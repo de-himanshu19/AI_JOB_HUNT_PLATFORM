@@ -180,6 +180,14 @@ class Settings(BaseModel):
     ai_cloud_model: str = "gpt-oss:20b"
     ai_timeout_seconds: float = Field(default=120, gt=0, le=600)
 
+    legacy_mysql_enabled: bool = False
+    legacy_mysql_host: str | None = None
+    legacy_mysql_port: int = Field(default=3306, ge=1, le=65535)
+    legacy_mysql_database: str | None = None
+    legacy_mysql_user: str | None = None
+    legacy_mysql_password: SecretStr | None = None
+    legacy_mysql_connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+
     @model_validator(mode="after")
     def validate_enabled_features(self) -> "Settings":
         if self.log_level.upper() not in {
@@ -201,6 +209,15 @@ class Settings(BaseModel):
             )
         if not self.arbeitsagentur_queries:
             raise ValueError("At least one Arbeitsagentur search query is required")
+        if self.legacy_mysql_enabled and (
+            not self.legacy_mysql_host
+            or not self.legacy_mysql_database
+            or not self.legacy_mysql_user
+            or self.legacy_mysql_password is None
+        ):
+            raise ValueError(
+                "Legacy MySQL credentials are required only when LEGACY_MYSQL_ENABLED=true"
+            )
         return self
 
     def redacted_dict(self) -> dict[str, object]:
@@ -395,6 +412,17 @@ def settings_from_mapping(
         ai_local_model=_first(values, "AI_LOCAL_MODEL", default="llama3.2:3b"),
         ai_cloud_model=_first(values, "AI_CLOUD_MODEL", default="gpt-oss:20b"),
         ai_timeout_seconds=_first(values, "AI_TIMEOUT_SECONDS", default="120"),
+        legacy_mysql_enabled=_first(
+            values, "LEGACY_MYSQL_ENABLED", default="false"
+        ),
+        legacy_mysql_host=_first(values, "LEGACY_MYSQL_HOST"),
+        legacy_mysql_port=_first(values, "LEGACY_MYSQL_PORT", default="3306"),
+        legacy_mysql_database=_first(values, "LEGACY_MYSQL_DATABASE"),
+        legacy_mysql_user=_first(values, "LEGACY_MYSQL_USER"),
+        legacy_mysql_password=_first(values, "LEGACY_MYSQL_PASSWORD"),
+        legacy_mysql_connect_timeout_seconds=_first(
+            values, "LEGACY_MYSQL_CONNECT_TIMEOUT_SECONDS", default="5"
+        ),
     )
 
 

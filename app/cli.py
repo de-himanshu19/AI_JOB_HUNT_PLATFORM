@@ -17,12 +17,14 @@ from app.db.repositories import (
 )
 from app.domain.duplicates import ReviewStatus
 from app.domain.enums import JobSource
+from app.domain.legacy_import import LegacyArtifactKind, LegacyImportPlan, LegacySourceType
 from app.logging_config import configure_logging
 from app.services.collection import CollectionService
 from app.services.cv_generation import CVGenerationService
 from app.services.analysis_rules import AnalysisRules
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
+from app.services.legacy_import import LegacyImportService
 from app.services.normalization import CompanyAliases
 from app.services.notifications import NotificationFormatter, NotificationService
 from app.services.ranking import RankingService
@@ -165,7 +167,48 @@ def build_parser() -> argparse.ArgumentParser:
     cv_list.add_argument("--job-id")
     cv_show = cv_commands.add_parser("show")
     cv_show.add_argument("artifact_id")
+
+    legacy = commands.add_parser("legacy", help="Import legacy local files safely")
+    legacy_commands = legacy.add_subparsers(dest="legacy_command", required=True)
+    legacy_inventory = legacy_commands.add_parser("inventory")
+    legacy_inventory.add_argument("--root", type=Path)
+    legacy_backup = legacy_commands.add_parser("backup")
+    legacy_backup.add_argument("--backup-dir", type=Path)
+    legacy_dry = legacy_commands.add_parser("dry-run")
+    legacy_dry.add_argument("--source", required=True, choices=_legacy_source_choices())
+    legacy_dry.add_argument("--path", type=Path, required=True)
+    legacy_apply = legacy_commands.add_parser("apply")
+    legacy_apply.add_argument("--source", required=True, choices=_legacy_source_choices())
+    legacy_apply.add_argument("--path", type=Path, required=True)
+    legacy_apply.add_argument("--backup-id", required=True)
+    legacy_apply.add_argument("--profile-key")
+    legacy_apply.add_argument(
+        "--artifact-kind",
+        choices=[item.value for item in LegacyArtifactKind],
+    )
+    legacy_reconcile = legacy_commands.add_parser("reconcile")
+    legacy_reconcile.add_argument("--batch-id", required=True)
+    legacy_commands.add_parser("batches")
+    legacy_show = legacy_commands.add_parser("show")
+    legacy_show.add_argument("batch_id")
+    legacy_verify = legacy_commands.add_parser("verify")
+    legacy_verify.add_argument("batch_id")
     return parser
+
+
+def _legacy_source_choices() -> list[str]:
+    return [
+        "englishjobs-csv",
+        "state-intelligence-csv",
+        "sent-jobs-json",
+        "master-cv-json",
+        "legacy-artifact",
+        "mysql-fixture",
+    ]
+
+
+def _legacy_source(value: str) -> LegacySourceType:
+    return LegacySourceType(value.replace("-", "_"))
 
 
 def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
@@ -678,6 +721,103 @@ def _cv(args: argparse.Namespace) -> int:
     return 0
 
 
+def _legacy_plan_json(plan: LegacyImportPlan) -> dict[str, object]:
+    return {
+        "source_type": plan.source_type.value,
+        "source_name": plan.source_name,
+        "source_path": str(plan.source_path) if plan.source_path else None,
+        "source_checksum": plan.source_checksum,
+        "batch_id": str(plan.batch_id) if plan.batch_id else None,
+        "backup_id": str(plan.backup_id) if plan.backup_id else None,
+        "records_read": plan.records_read,
+        "creates": plan.creates,
+        "updates": plan.updates,
+        "skips": plan.skips,
+        "conflicts": plan.conflicts,
+        "uncertain": plan.uncertain,
+        "rejected": plan.rejected,
+        "warnings": list(plan.warnings),
+        "reconciliation": plan.reconciliation,
+        "database_modified": plan.database_modified,
+        "network_requested": plan.network_requested,
+        "idempotent_replay": plan.idempotent_replay,
+        "sample_items": [
+            item.model_dump(mode="json") for item in plan.items[:20]
+        ],
+    }
+
+
+def _legacy(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    service = LegacyImportService(database, settings)
+
+    if args.legacy_command == "inventory":
+        print(json.dumps(
+            service.inventory(args.root), ensure_ascii=False, indent=2
+        ))
+        return 0
+    if args.legacy_command == "dry-run":
+        plan = service.dry_run(_legacy_source(args.source), args.path)
+        print(json.dumps(_legacy_plan_json(plan), ensure_ascii=False, indent=2))
+        return 0
+
+    migrate(database)
+    if args.legacy_command == "backup":
+        backup = service.create_backup(args.backup_dir)
+        print(json.dumps(backup.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return 0
+    if args.legacy_command == "apply":
+        source_type = _legacy_source(args.source)
+        plan = service.apply(
+            source_type,
+            args.path,
+            backup_id=args.backup_id,
+            profile_key=args.profile_key,
+            artifact_kind=args.artifact_kind,
+        )
+        output = _legacy_plan_json(plan)
+        if source_type in {
+            LegacySourceType.ENGLISHJOBS_CSV,
+            LegacySourceType.STATE_INTELLIGENCE_CSV,
+        } and not plan.idempotent_replay:
+            alias_path = settings.company_aliases_path
+            dedup_report = DeduplicationService(
+                database, aliases=CompanyAliases.from_json(alias_path)
+            ).backfill(algorithm_version=DEDUPLICATION_VERSION)
+            output["deduplication"] = dedup_report.__dict__
+            output["current_analysis_required"] = True
+            output["legacy_scores_authoritative"] = False
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+        return 0
+    if args.legacy_command == "reconcile":
+        print(json.dumps(
+            service.reconcile(args.batch_id), ensure_ascii=False, indent=2
+        ))
+        return 0
+    if args.legacy_command == "batches":
+        print(json.dumps(
+            [batch.model_dump(mode="json") for batch in service.batches()],
+            ensure_ascii=False,
+            indent=2,
+        ))
+        return 0
+    if args.legacy_command == "show":
+        batch, items = service.show(args.batch_id)
+        print(json.dumps({
+            "batch": batch.model_dump(mode="json"),
+            "items": [item.model_dump(mode="json") for item in items],
+        }, ensure_ascii=False, indent=2))
+        return 0
+    if args.legacy_command == "verify":
+        print(json.dumps(
+            service.verify(args.batch_id), ensure_ascii=False, indent=2
+        ))
+        return 0
+    raise AssertionError("Unhandled legacy command")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "collect" and args.source == "arbeitsagentur":
@@ -698,6 +838,8 @@ def main(argv: list[str] | None = None) -> int:
         return _notify(args)
     if args.command == "cv":
         return _cv(args)
+    if args.command == "legacy":
+        return _legacy(args)
     raise AssertionError("Unhandled command")
 
 

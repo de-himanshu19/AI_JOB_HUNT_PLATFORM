@@ -34,6 +34,9 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
     assert settings.telegram_top_n == 20
     assert settings.telegram_message_max_chars == 4000
     assert settings.telegram_max_retries == 3
+    assert settings.legacy_mysql_enabled is False
+    assert settings.legacy_mysql_host is None
+    assert settings.legacy_mysql_port == 3306
 
 
 def test_windows_safe_relative_path_resolution(tmp_path: Path) -> None:
@@ -103,6 +106,11 @@ def test_feature_specific_validation_is_deferred_until_enabled(tmp_path: Path) -
             {"AI_PROVIDER": "ollama_cloud"}, root=tmp_path
         )
 
+    with pytest.raises(ValidationError, match="Legacy MySQL credentials"):
+        config.settings_from_mapping(
+            {"LEGACY_MYSQL_ENABLED": "true"}, root=tmp_path
+        )
+
 
 def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
     settings = config.settings_from_mapping(
@@ -110,6 +118,7 @@ def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
             "TELEGRAM_BOT_TOKEN": "do-not-log",
             "TELEGRAM_CHAT_ID": "do-not-log",
             "AI_OLLAMA_API_KEY": "do-not-log",
+            "LEGACY_MYSQL_PASSWORD": "do-not-log",
         },
         root=tmp_path,
     )
@@ -118,6 +127,7 @@ def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
     assert redacted["telegram_bot_token"] == "***REDACTED***"
     assert redacted["telegram_chat_id"] == "***REDACTED***"
     assert redacted["ai_ollama_api_key"] == "***REDACTED***"
+    assert redacted["legacy_mysql_password"] == "***REDACTED***"
     assert redacted["arbeitsagentur_api_key"] == "***REDACTED***"
     assert "do-not-log" not in repr(redacted)
 

@@ -106,6 +106,19 @@ External credential rotation remains a manual security gate. No credential value
 - Empty/populated database, Unicode, no-network, query, action, launcher, and Streamlit startup tests.
 - No migration 007; migrations 001-006 and historical records remain authoritative and readable.
 
+### Migration Milestone 9
+
+- Additive migration 007 for legacy import backups, batches, sources, items, mappings, notification suppressions, and non-authoritative legacy artifacts.
+- Verified SQLite backup gate with recorded path, size, SHA-256 hash, readability check, and apply refusal on missing or mismatched backups.
+- Dry-run-first local import service for EnglishJobs scored CSVs, state-intelligence classified/scored CSVs, `sent_jobs.json`, explicit `master_cv.json` profile import, selected TXT artifacts, and fixture MySQL rows.
+- Idempotent apply keyed by source type, source name, source checksum, and importer version.
+- CSV jobs are imported as EnglishJobs source records with snippet descriptions only; raw legacy values and legacy scores are retained as reference metadata, not authoritative analyses/rankings.
+- CSV apply routes jobs through the existing Milestone 4 deduplication backfill from the CLI.
+- Sent-history import creates notification suppressions only for exact current clustered mappings; uncertain mappings do not suppress Telegram.
+- Legacy TXT artifacts are copied into generated storage as immutable, content-hashed, non-authoritative records.
+- Candidate profile import remains explicit and versioned.
+- MySQL support is fixture-first through an injectable reader boundary; `LEGACY_MYSQL_ENABLED=false` by default and no real credentials or driver are required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -136,6 +149,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 6: Telegram integration/notification service, `migrations/005_telegram_notifications.sql`, notification tests, and `docs/TELEGRAM_NOTIFICATIONS.md`.
 - Milestone 7: generic CV builder/validators/storage, optional Ollama provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
 - Milestone 8: `app/dashboard`, optional Streamlit extra/launcher, dashboard tests, `.streamlit/config.toml`, and `docs/DASHBOARD.md`.
+- Milestone 9: `app/domain/legacy_import.py`, `app/services/legacy_import.py`, `migrations/007_legacy_import.sql`, legacy import CLI commands, focused tests, and `docs/LEGACY_IMPORT.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -157,7 +171,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **214 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 8 verification point.
+- Fixture-only pytest suite: **225 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 9 verification point.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -177,9 +191,9 @@ python -m pytest
 - CV generation supports FlowCV TXT only; DOCX/PDF and cover letters remain deferred.
 - Real Telegram delivery remains disabled until credentials are rotated and explicit live mode is used.
 - Dashboard is local and single-user; no authentication or cloud deployment exists.
-- The database intentionally starts clean; no CSV, MySQL, or sent-history import exists.
+- Real MySQL import is not required; the Milestone 9 boundary is fixture-first and read-only by design.
 - Credential rotation must be completed externally before live integrations.
 
 ## Next recommended milestone
 
-Stop here pending approval. Milestone 9 legacy import remains unstarted and outside the current scope.
+Stop here pending checkpoint approval. Do not begin Milestone 10 or broader scheduling/cleanup work without a separate plan.

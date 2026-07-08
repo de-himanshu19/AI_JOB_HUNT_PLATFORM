@@ -70,6 +70,18 @@ This repository does not copy or display any discovered credential value. Rotati
 - [x] Secrets, prompts, CV/JD text, payloads, and provider responses are excluded from diagnostics.
 - [x] Original vacancy links open only through an explicit user click.
 
+## Legacy import controls
+
+- [x] Legacy import dry-run writes no database data and makes no network calls.
+- [x] Apply requires an explicit verified SQLite backup ID.
+- [x] Legacy `.env` files are not imported, displayed, parsed, or logged.
+- [x] CSV descriptions are marked as snippets unless source evidence proves full text.
+- [x] Legacy scores remain reference metadata and are not authoritative Milestone 5 analyses/rankings.
+- [x] `sent_jobs.json` mappings suppress Telegram only when mapped exactly to a current clustered vacancy.
+- [x] Legacy artifacts are copied as immutable, content-hashed, non-authoritative records.
+- [x] `LEGACY_MYSQL_ENABLED=false` by default; tests use fixture readers and no real MySQL credentials.
+- [x] The optional MySQL boundary rejects write/DDL statements.
+
 ## Incident response
 
 If a secret is exposed: disable the affected feature, revoke/rotate the credential at the provider, inspect usage, remove it from current files and logs, assess repository history, and document the incident without reproducing the secret.

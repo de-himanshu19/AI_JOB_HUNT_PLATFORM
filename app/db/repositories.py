@@ -7,7 +7,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.domain.application import Application, ApplicationEvent
 from app.domain.analysis import JobAnalysis, JobRanking
@@ -27,6 +27,17 @@ from app.domain.enums import (
     NotificationStatus,
 )
 from app.domain.job import Job, JobDescription
+from app.domain.legacy_import import (
+    LegacyBackup,
+    LegacyImportAction,
+    LegacyImportBatch,
+    LegacyImportItem,
+    LegacyImportMapping,
+    LegacyImportMode,
+    LegacyImportStatus,
+    LegacyItemType,
+    LegacySourceType,
+)
 from app.domain.operations import (
     CVArtifact,
     CollectionRun,
@@ -752,6 +763,16 @@ class NotificationRepository:
                     AND notified.channel = 'telegram'
                     AND notified.status IN ('pending', 'sent')
               )
+              AND NOT EXISTS (
+                  SELECT 1 FROM legacy_notification_suppressions AS legacy
+                  WHERE legacy.duplicate_cluster_id = latest.cluster_id
+                    AND legacy.duplicate_algorithm_version = ?
+                    AND legacy.channel = 'telegram'
+                    AND (
+                        legacy.profile_id IS NULL
+                        OR legacy.profile_id = latest.profile_id
+                    )
+              )
             ORDER BY latest.rank_score DESC,
                      analyses.fit_score DESC,
                      jobs.published_at DESC,
@@ -762,7 +783,8 @@ class NotificationRepository:
             LIMIT ?""",
             (
                 str(profile_id), ranking_version, min_rank_score,
-                duplicate_algorithm_version, duplicate_algorithm_version, limit,
+                duplicate_algorithm_version, duplicate_algorithm_version,
+                duplicate_algorithm_version, limit,
             ),
         ).fetchall()
         return [dict(row) for row in rows]
@@ -1114,6 +1136,303 @@ class CVGenerationArtifactRepository:
             ai_generated_at=_dt(row["ai_generated_at"]),
             validated=bool(row["validated"]),
             validation_result=json.loads(row["validation_result_json"]),
+            created_at=_dt(row["created_at"]),
+        )
+
+
+class LegacyImportRepository:
+    def __init__(self, connection: sqlite3.Connection):
+        self.connection = connection
+
+    def create_backup(self, backup: LegacyBackup) -> LegacyBackup:
+        self.connection.execute(
+            """INSERT INTO legacy_import_backups (
+                id, database_path, backup_path, sha256, size_bytes, verified,
+                created_at, verified_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(backup.id),
+                str(backup.database_path),
+                str(backup.backup_path),
+                backup.sha256,
+                backup.size_bytes,
+                int(backup.verified),
+                _iso(backup.created_at),
+                _iso(backup.verified_at),
+            ),
+        )
+        return backup
+
+    def get_backup(self, backup_id: UUID | str) -> LegacyBackup | None:
+        row = self.connection.execute(
+            "SELECT * FROM legacy_import_backups WHERE id = ?", (str(backup_id),)
+        ).fetchone()
+        return self._backup_from_row(row) if row else None
+
+    def create_batch(self, batch: LegacyImportBatch) -> LegacyImportBatch:
+        self.connection.execute(
+            """INSERT INTO legacy_import_batches (
+                id, source_type, source_name, source_path, source_checksum,
+                importer_version, mode, status, backup_id, started_at,
+                finished_at, records_read, creates, updates, skips, conflicts,
+                uncertain, rejected, warnings_json, reconciliation_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(batch.id),
+                batch.source_type.value,
+                batch.source_name,
+                str(batch.source_path) if batch.source_path else None,
+                batch.source_checksum,
+                batch.importer_version,
+                batch.mode.value,
+                batch.status.value,
+                str(batch.backup_id) if batch.backup_id else None,
+                _iso(batch.started_at),
+                _iso(batch.finished_at),
+                batch.records_read,
+                batch.creates,
+                batch.updates,
+                batch.skips,
+                batch.conflicts,
+                batch.uncertain,
+                batch.rejected,
+                _json(list(batch.warnings)),
+                _json(batch.reconciliation),
+                _iso(batch.created_at),
+            ),
+        )
+        return batch
+
+    def find_completed_batch(
+        self,
+        source_type: LegacySourceType,
+        source_name: str,
+        checksum: str,
+        importer_version: str,
+    ) -> LegacyImportBatch | None:
+        row = self.connection.execute(
+            """SELECT * FROM legacy_import_batches
+            WHERE source_type = ? AND source_name = ? AND source_checksum = ?
+              AND importer_version = ? AND mode = 'apply'
+              AND status IN ('completed', 'reused')
+            ORDER BY created_at DESC, id DESC LIMIT 1""",
+            (source_type.value, source_name, checksum, importer_version),
+        ).fetchone()
+        return self._batch_from_row(row) if row else None
+
+    def get_batch(self, batch_id: UUID | str) -> LegacyImportBatch | None:
+        row = self.connection.execute(
+            "SELECT * FROM legacy_import_batches WHERE id = ?", (str(batch_id),)
+        ).fetchone()
+        return self._batch_from_row(row) if row else None
+
+    def list_batches(self) -> list[LegacyImportBatch]:
+        rows = self.connection.execute(
+            "SELECT * FROM legacy_import_batches ORDER BY created_at DESC, id DESC"
+        ).fetchall()
+        return [self._batch_from_row(row) for row in rows]
+
+    def create_source(
+        self,
+        *,
+        batch_id: UUID,
+        source_type: LegacySourceType,
+        source_path: Path | None,
+        logical_name: str,
+        source_checksum: str,
+        size_bytes: int,
+        record_count: int,
+        created_at: datetime,
+    ) -> None:
+        self.connection.execute(
+            """INSERT INTO legacy_import_sources (
+                id, batch_id, source_type, source_path, logical_name,
+                source_checksum, size_bytes, record_count, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid4()),
+                str(batch_id),
+                source_type.value,
+                str(source_path) if source_path else None,
+                logical_name,
+                source_checksum,
+                size_bytes,
+                record_count,
+                _iso(created_at),
+            ),
+        )
+
+    def create_item(self, item: LegacyImportItem) -> LegacyImportItem:
+        self.connection.execute(
+            """INSERT INTO legacy_import_items (
+                id, batch_id, item_key, item_type, action,
+                original_source_identifier, source_checksum, content_checksum,
+                mapping_confidence, target_table, target_id, warnings_json,
+                summary_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(item.id),
+                str(item.batch_id),
+                item.item_key,
+                item.item_type.value,
+                item.action.value,
+                item.original_source_identifier,
+                item.source_checksum,
+                item.content_checksum,
+                item.mapping_confidence,
+                item.target_table,
+                item.target_id,
+                _json(list(item.warnings)),
+                _json(item.summary),
+                _iso(item.created_at),
+            ),
+        )
+        return item
+
+    def create_mapping(self, mapping: LegacyImportMapping) -> LegacyImportMapping:
+        self.connection.execute(
+            """INSERT INTO legacy_import_mappings (
+                id, item_id, mapping_type, target_table, target_id, confidence,
+                suppresses_notifications, warnings_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(mapping.id),
+                str(mapping.item_id),
+                mapping.mapping_type,
+                mapping.target_table,
+                mapping.target_id,
+                mapping.confidence,
+                int(mapping.suppresses_notifications),
+                _json(list(mapping.warnings)),
+                _iso(mapping.created_at),
+            ),
+        )
+        return mapping
+
+    def create_notification_suppression(
+        self,
+        *,
+        import_item_id: UUID,
+        duplicate_cluster_id: UUID | str,
+        duplicate_algorithm_version: str,
+        profile_id: UUID | str | None,
+        channel: str,
+        source_identifier: str,
+        confidence: float,
+        reason: str,
+        created_at: datetime,
+    ) -> None:
+        self.connection.execute(
+            """INSERT OR IGNORE INTO legacy_notification_suppressions (
+                id, import_item_id, duplicate_cluster_id,
+                duplicate_algorithm_version, profile_id, channel,
+                source_identifier, confidence, reason, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid4()),
+                str(import_item_id),
+                str(duplicate_cluster_id),
+                duplicate_algorithm_version,
+                str(profile_id) if profile_id else None,
+                channel,
+                source_identifier,
+                confidence,
+                reason,
+                _iso(created_at),
+            ),
+        )
+
+    def create_legacy_artifact(
+        self,
+        *,
+        import_item_id: UUID,
+        artifact_kind: str,
+        original_path: Path,
+        stored_path: Path,
+        content_hash: str,
+        size_bytes: int,
+        created_at: datetime,
+    ) -> None:
+        self.connection.execute(
+            """INSERT INTO legacy_artifacts (
+                id, import_item_id, artifact_kind, original_path, stored_path,
+                content_hash, size_bytes, authoritative, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)""",
+            (
+                str(uuid4()),
+                str(import_item_id),
+                artifact_kind,
+                str(original_path),
+                str(stored_path),
+                content_hash,
+                size_bytes,
+                _iso(created_at),
+            ),
+        )
+
+    def items_for_batch(self, batch_id: UUID | str) -> list[LegacyImportItem]:
+        rows = self.connection.execute(
+            """SELECT * FROM legacy_import_items
+            WHERE batch_id = ? ORDER BY created_at, id""",
+            (str(batch_id),),
+        ).fetchall()
+        return [self._item_from_row(row) for row in rows]
+
+    @staticmethod
+    def _backup_from_row(row: sqlite3.Row) -> LegacyBackup:
+        return LegacyBackup(
+            id=UUID(row["id"]),
+            database_path=Path(row["database_path"]),
+            backup_path=Path(row["backup_path"]),
+            sha256=row["sha256"],
+            size_bytes=row["size_bytes"],
+            verified=bool(row["verified"]),
+            created_at=_dt(row["created_at"]),
+            verified_at=_dt(row["verified_at"]),
+        )
+
+    @staticmethod
+    def _batch_from_row(row: sqlite3.Row) -> LegacyImportBatch:
+        return LegacyImportBatch(
+            id=UUID(row["id"]),
+            source_type=LegacySourceType(row["source_type"]),
+            source_name=row["source_name"],
+            source_path=Path(row["source_path"]) if row["source_path"] else None,
+            source_checksum=row["source_checksum"],
+            importer_version=row["importer_version"],
+            mode=LegacyImportMode(row["mode"]),
+            status=LegacyImportStatus(row["status"]),
+            backup_id=_uuid(row["backup_id"]),
+            started_at=_dt(row["started_at"]),
+            finished_at=_dt(row["finished_at"]),
+            records_read=row["records_read"],
+            creates=row["creates"],
+            updates=row["updates"],
+            skips=row["skips"],
+            conflicts=row["conflicts"],
+            uncertain=row["uncertain"],
+            rejected=row["rejected"],
+            warnings=tuple(json.loads(row["warnings_json"])),
+            reconciliation=json.loads(row["reconciliation_json"]),
+            created_at=_dt(row["created_at"]),
+        )
+
+    @staticmethod
+    def _item_from_row(row: sqlite3.Row) -> LegacyImportItem:
+        return LegacyImportItem(
+            id=UUID(row["id"]),
+            batch_id=UUID(row["batch_id"]),
+            item_key=row["item_key"],
+            item_type=LegacyItemType(row["item_type"]),
+            action=LegacyImportAction(row["action"]),
+            original_source_identifier=row["original_source_identifier"],
+            source_checksum=row["source_checksum"],
+            content_checksum=row["content_checksum"],
+            mapping_confidence=row["mapping_confidence"],
+            target_table=row["target_table"],
+            target_id=row["target_id"],
+            warnings=tuple(json.loads(row["warnings_json"])),
+            summary=json.loads(row["summary_json"]),
             created_at=_dt(row["created_at"]),
         )
 

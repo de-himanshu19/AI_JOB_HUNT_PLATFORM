@@ -189,19 +189,21 @@ pages, and no migration 007.
 
 ## Milestone 9 — Legacy import and retirement
 
-**Goal:** optionally import useful legacy job/history/artifact data and stop scheduling legacy entry points.
+**Implementation status:** implemented fixture-first/local-file-first with additive migration 007, dry-run/apply/backup/reconcile/verify CLI workflows, local CSV/JSON/TXT importers, and a fixture MySQL reader boundary. Legacy schedulers are inventoried by runbook only and are not disabled automatically.
+
+**Goal:** optionally import useful legacy job/history/artifact data and prepare safe retirement of legacy entry points.
 
 **Reuse:** EnglishJobs CSVs, `sent_jobs.json`, fit reports/tracker, CV outputs, intelligence MySQL data if still available.
 
 **Add/change:** dry-run importers, reconciliation report, backup/export tooling, operator runbook.
 
-**Acceptance criteria:** source counts/checksums reconcile; imports are idempotent; uncertain mappings are reported; Telegram history prevents unwanted resend where mappings are reliable; legacy schedulers are disabled only after two successful unified runs.
+**Acceptance criteria:** source counts/checksums reconcile; imports are idempotent; uncertain mappings are reported; Telegram history prevents unwanted resend where mappings are reliable; legacy schedulers are disabled manually only after two successful unified runs.
 
 **Tests:** importer fixtures, malformed/old schemas, duplicate imports, interrupted transaction, MySQL-to-SQLite sample, notification mapping.
 
 **Rollback:** restore SQLite backup and re-enable legacy scheduler; imported data is never the only copy until sign-off.
 
-**Known limitations:** old signed EnglishJobs links may be expired; historic data lacks full descriptions and may not map cleanly across sources.
+**Known limitations:** old signed EnglishJobs links may be expired; historic data lacks full descriptions and may not map cleanly across sources. Real MySQL import remains optional and is not required for Milestone 9 acceptance.
 
 ## Recommended first implementation milestone
 
