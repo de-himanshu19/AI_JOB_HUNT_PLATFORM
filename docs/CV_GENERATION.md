@@ -32,6 +32,15 @@ report or SQLite metadata. Candidate facts are copied from the versioned profile
 formatting does not promote courses to employment, exposure to ownership,
 projects to professional experience, or language levels to stronger claims.
 
+The rule-based FlowCV formatter targets a concise two-page copy-paste draft for
+Data Analyst-style applications. It caps the professional summary at five
+wrapped lines, groups skills separately from languages, combines same-company
+experience blocks, limits each role to a small set of strongest JD-relevant
+bullets, limits projects to the top three with at most three bullets each, and
+removes broken Unicode/control characters before writing the artifact. Job-fit
+evidence still drives selection; unsupported skills or stronger language claims
+remain excluded by the validator.
+
 ## Identity and storage
 
 The authoritative cache identity hashes generation mode, description row/hash,

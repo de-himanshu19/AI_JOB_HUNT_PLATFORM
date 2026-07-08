@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import textwrap
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -10,7 +12,84 @@ from app.domain.candidate import CandidateProfile
 
 
 GENERATOR_VERSION = "m7-generator-v1"
-FORMATTER_VERSION = "flowcv-text-v1"
+FORMATTER_VERSION = "flowcv-text-v2"
+
+SUMMARY_WIDTH = 96
+SUMMARY_MAX_LINES = 5
+MAX_ACHIEVEMENTS = 3
+MAX_EXPERIENCE_ITEMS = 4
+MAX_EXPERIENCE_BULLETS = 4
+MAX_PROJECTS = 3
+MAX_PROJECT_BULLETS = 3
+MAX_CERTIFICATIONS = 5
+MAX_CERTIFICATION_BULLETS = 1
+MAX_EDUCATION_ITEMS = 2
+MAX_EDUCATION_BULLETS = 1
+
+LANGUAGE_NAMES = {"english", "german", "hindi", "french", "spanish", "italian"}
+LANGUAGE_LEVELS = {
+    "a1", "a2", "b1", "b2", "c1", "c2", "basic", "native", "fluent",
+    "professional", "business", "excellent", "intermediate", "beginner",
+}
+SKILL_CANONICAL = {
+    "api": "APIs",
+    "apis": "APIs",
+    "data cleaning": "data cleaning",
+    "data validation": "validation",
+    "database": "databases",
+    "dashboard": "dashboards",
+    "dashboards": "dashboards",
+    "etl": "ETL",
+    "excel": "Excel",
+    "github": "GitHub",
+    "git": "GitHub",
+    "kpi": "KPI reporting",
+    "kpi reporting": "KPI reporting",
+    "mysql": "MySQL",
+    "pandas": "Pandas",
+    "power bi": "Power BI",
+    "python": "Python",
+    "reconciliation": "reconciliation",
+    "reporting": "reporting",
+    "salesforce": "Salesforce CRM",
+    "salesforce crm": "Salesforce CRM",
+    "sap": "SAP",
+    "servicenow": "ServiceNow",
+    "sql": "SQL",
+    "sqlalchemy": "SQLAlchemy",
+    "sqlite": "SQLite",
+    "stakeholder coordination": "stakeholder coordination",
+    "tableau": "Tableau",
+    "validation": "validation",
+}
+SKILL_GROUPS = (
+    ("Data Analysis", ("sql", "excel", "python", "pandas", "clean", "validation", "reconciliation", "analysis", "data quality"), 8),
+    ("BI & Reporting", ("power bi", "tableau", "kpi", "dashboard", "visualization", "reporting", "scorecard"), 7),
+    ("Databases & ETL", ("mysql", "sqlite", "sqlalchemy", "api", "etl", "database", "pipeline"), 7),
+    ("Business/Domain", ("bank", "compliance", "stakeholder", "coordination", "operation", "reporting", "aml", "kyc"), 7),
+    ("Tools", ("sap", "salesforce", "servicenow", "github", "git", "office"), 7),
+)
+
+
+def _clean_text(value: str) -> str:
+    """Remove broken/control characters while preserving truthful source text."""
+    text = str(value)
+    cleaned: list[str] = []
+    for char in text:
+        code = ord(char)
+        is_noncharacter = (
+            0xFDD0 <= code <= 0xFDEF
+            or (code & 0xFFFF) in {0xFFFE, 0xFFFF}
+        )
+        if char in {"\ufeff", "\ufffd"} or is_noncharacter:
+            cleaned.append(" ")
+        elif char in {"\n", "\r", "\t"}:
+            cleaned.append(" ")
+        elif code < 32 or 0x7F <= code <= 0x9F:
+            cleaned.append(" ")
+        else:
+            cleaned.append(char)
+    return re.sub(r"\s+", " ", "".join(cleaned)).strip()
 
 
 def _items(data: dict[str, Any], name: str) -> list[dict[str, Any]]:
@@ -21,7 +100,8 @@ def _items(data: dict[str, Any], name: str) -> list[dict[str, Any]]:
 
 def _strings(value: Any) -> list[str]:
     if isinstance(value, str):
-        return [value.strip()] if value.strip() else []
+        cleaned = _clean_text(value)
+        return [cleaned] if cleaned else []
     if isinstance(value, list):
         return [text for item in value for text in _strings(item)]
     if isinstance(value, dict):
@@ -33,6 +113,7 @@ def _unique(values: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
+        value = _clean_text(value)
         key = " ".join(value.casefold().split())
         if value and key not in seen:
             seen.add(key)
@@ -44,8 +125,45 @@ def _field(item: dict[str, Any], *names: str) -> str | None:
     for name in names:
         value = item.get(name)
         if isinstance(value, (str, int, float)) and str(value).strip():
-            return str(value).strip()
+            return _clean_text(str(value))
     return None
+
+
+def _language_like(value: str) -> bool:
+    words = set(re.findall(r"[a-z0-9+/.-]+", value.casefold()))
+    return bool(words & LANGUAGE_NAMES) and bool(words & LANGUAGE_LEVELS)
+
+
+def _canonical_skill(value: str) -> str:
+    lowered = value.casefold().strip()
+    if lowered in SKILL_CANONICAL:
+        return SKILL_CANONICAL[lowered]
+    for key, canonical in SKILL_CANONICAL.items():
+        if key in lowered:
+            return canonical
+    return value[:1].upper() + value[1:] if value.islower() else value
+
+
+def _score_text(text: str, context_terms: tuple[str, ...]) -> int:
+    lowered = text.casefold()
+    score = 0
+    for term in context_terms:
+        normalized = term.casefold()
+        if normalized and normalized in lowered:
+            score += 4 if len(normalized) > 3 else 1
+    for keyword in ("sql", "excel", "python", "pandas", "power bi", "tableau", "kpi", "dashboard", "validation", "reconciliation", "reporting", "etl"):
+        if keyword in lowered:
+            score += 1
+    return score
+
+
+def _item_details(item: dict[str, Any]) -> list[str]:
+    return _unique([
+        *_strings(item.get("summary")), *_strings(item.get("role_summary")),
+        *_strings(item.get("description")), *_strings(item.get("bullet_bank")),
+        *_strings(item.get("bullets")), *_strings(item.get("achievements")),
+        *_strings(item.get("metrics")),
+    ])
 
 
 @dataclass(frozen=True)
@@ -82,28 +200,50 @@ class CVBuilder:
             or "Professional Candidate"
         ).strip()
 
+        context_terms = self._context_terms(requirements, evidence)
+
         lines: list[str] = ["CANDIDATE HEADER"]
         lines.extend(self._header(personal))
         lines.extend(["", "PROFESSIONAL HEADLINE", headline])
         lines.extend(["", "PROFESSIONAL SUMMARY"])
-        lines.append(self._summary(data, headline))
+        lines.extend(self._summary(data, headline))
 
         metrics = _unique(_strings(data.get("verified_metrics", data.get("metrics_and_achievements", []))))
         if metrics:
-            lines.extend(["", "ACHIEVEMENTS", *[f"- {item}" for item in metrics]])
+            ranked_metrics = self._rank_texts(metrics, context_terms)[:MAX_ACHIEVEMENTS]
+            lines.extend(["", "ACHIEVEMENTS", *[f"- {item}" for item in ranked_metrics]])
 
-        skills = self._skills(data, requirements, evidence)
-        if skills:
-            lines.extend(["", "KEY SKILLS", " | ".join(skills)])
+        skill_groups = self._skill_groups(data, requirements, evidence)
+        if skill_groups:
+            lines.extend(["", "KEY SKILLS", *skill_groups])
 
-        self._add_items(lines, "PROFESSIONAL EXPERIENCE", _items(data, "work_experience"), "role", "company")
-        self._add_items(lines, "PROJECTS", _items(data, "projects"), "name", "project_name", "title")
+        used_bullets: set[str] = set()
+        self._add_items(
+            lines, "PROFESSIONAL EXPERIENCE",
+            self._experience_blocks(_items(data, "work_experience")),
+            context_terms, used_bullets,
+            max_items=MAX_EXPERIENCE_ITEMS, max_bullets=MAX_EXPERIENCE_BULLETS,
+            label_fields=("role", "company"),
+        )
+        self._add_items(
+            lines, "PROJECTS", _items(data, "projects"), context_terms, used_bullets,
+            max_items=MAX_PROJECTS, max_bullets=MAX_PROJECT_BULLETS,
+            label_fields=("name", "project_name", "title"),
+        )
         courses = [
             *_items(data, "certifications"), *_items(data, "courses"),
             *_items(data, "training_and_courses"),
         ]
-        self._add_items(lines, "CERTIFICATIONS AND COURSES", courses, "name", "title", "certificate")
-        self._add_items(lines, "EDUCATION", _items(data, "education"), "degree", "name", "institution")
+        self._add_items(
+            lines, "CERTIFICATIONS AND COURSES", courses, context_terms, used_bullets,
+            max_items=MAX_CERTIFICATIONS, max_bullets=MAX_CERTIFICATION_BULLETS,
+            label_fields=("name", "title", "certificate"),
+        )
+        self._add_items(
+            lines, "EDUCATION", _items(data, "education"), context_terms, used_bullets,
+            max_items=MAX_EDUCATION_ITEMS, max_bullets=MAX_EDUCATION_BULLETS,
+            label_fields=("degree", "name", "institution"),
+        )
 
         languages = self._languages(data.get("languages", []))
         if languages:
@@ -115,7 +255,7 @@ class CVBuilder:
         if additional:
             lines.extend(["", "ADDITIONAL INFORMATION", *[f"- {item}" for item in _unique(additional)]])
 
-        cv_text = "\n".join(lines).strip() + "\n"
+        cv_text = self._cv_text(lines)
         report = self._report(
             detected_role, requirements, evidence, missing_requirements,
             risk_flags, metrics, description_completeness, provenance, data,
@@ -131,23 +271,38 @@ class CVBuilder:
         ordered = (
             "full_name", "location", "phone", "email", "linkedin", "github"
         )
-        values = [str(personal[key]).strip() for key in ordered if personal.get(key)]
+        values = [_clean_text(str(personal[key])) for key in ordered if personal.get(key)]
         return values or ["Candidate"]
 
     @staticmethod
-    def _summary(data: dict[str, Any], headline: str) -> str:
+    def _summary(data: dict[str, Any], headline: str) -> list[str]:
         for key in ("professional_summary", "summary"):
             values = _strings(data.get(key))
             if values:
-                return values[0]
+                return CVBuilder._wrap(values[0])
         skills = _strings(data.get("skills_and_tools", data.get("skills_bank", {})))
         if skills:
-            return f"{headline} with verified evidence in {', '.join(_unique(skills)[:4])}."
-        return headline
+            text = f"{headline} with verified evidence in {', '.join(_unique(skills)[:4])}."
+            return CVBuilder._wrap(text)
+        return CVBuilder._wrap(headline)
 
     @staticmethod
-    def _skills(data, requirements, evidence) -> list[str]:
-        all_skills = _unique(_strings(data.get("skills_and_tools", data.get("skills_bank", {}))))
+    def _wrap(text: str) -> list[str]:
+        shortened = textwrap.shorten(
+            _clean_text(text),
+            width=SUMMARY_WIDTH * SUMMARY_MAX_LINES,
+            placeholder=".",
+        )
+        return textwrap.wrap(
+            shortened,
+            width=SUMMARY_WIDTH,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )[:SUMMARY_MAX_LINES] or [shortened]
+
+    @staticmethod
+    def _skill_groups(data, requirements, evidence) -> list[str]:
+        all_skills = CVBuilder._profile_skills(data)
         supported_ids = {
             item.requirement_id for item in evidence
             if item.evidence_type is not EvidenceType.NO_EVIDENCE
@@ -155,18 +310,67 @@ class CVBuilder:
         preferred = [
             item.name for item in requirements
             if item.requirement_id in supported_ids
-            and item.category.value in {"skill", "tool"}
+            and item.category.value in {"skill", "tool", "domain"}
         ]
-        return _unique([*preferred, *all_skills])[:24]
+        candidates = [
+            _canonical_skill(value)
+            for value in _unique([*preferred, *all_skills])
+            if not _language_like(value)
+        ]
+        unused = _unique(candidates)
+        grouped: list[str] = []
+        used: set[str] = set()
+        for group_name, keywords, limit in SKILL_GROUPS:
+            matches = []
+            for skill in unused:
+                lowered = skill.casefold()
+                if skill not in used and any(keyword in lowered for keyword in keywords):
+                    matches.append(skill)
+                    used.add(skill)
+            if matches:
+                grouped.append(f"{group_name}: {', '.join(matches[:limit])}")
+        return grouped
 
     @staticmethod
-    def _add_items(lines, heading, items, *label_fields):
+    def _profile_skills(data: dict[str, Any]) -> list[str]:
+        skills_payload = data.get("skills_and_tools", data.get("skills_bank", {}))
+        values: list[str] = []
+        if isinstance(skills_payload, dict):
+            for key, value in skills_payload.items():
+                key_text = str(key).casefold()
+                if any(term in key_text for term in (*LANGUAGE_NAMES, "language", "languages")):
+                    continue
+                values.extend(_strings(value))
+        else:
+            values.extend(_strings(skills_payload))
+        for section in (
+            "work_experience", "projects", "education", "certifications",
+            "courses", "training_and_courses",
+        ):
+            for item in _items(data, section):
+                values.extend(_strings(item.get("skills")))
+                values.extend(_strings(item.get("tools")))
+                values.extend(_strings(item.get("domains")))
+        return _unique(value for value in values if not _language_like(value))
+
+    @staticmethod
+    def _add_items(
+        lines, heading, items, context_terms, used_bullets, *,
+        max_items, max_bullets, label_fields,
+    ):
         if not items:
             return
         lines.extend(["", heading])
-        for item in items:
+        ranked_items = sorted(
+            enumerate(items),
+            key=lambda pair: -CVBuilder._score_item(pair[1], context_terms),
+        )
+        for display_index, (_item_index, item) in enumerate(ranked_items[:max_items]):
+            if display_index > 0:
+                lines.append("")
             label = _field(item, *label_fields) or "Stored evidence"
             company = _field(item, "company", "provider", "institution", "school")
+            location = _field(item, "location")
             dates = _field(item, "dates", "date", "period")
             if dates is None:
                 start = _field(item, "start_date", "start")
@@ -174,29 +378,140 @@ class CVBuilder:
                 dates = " - ".join(value for value in (start, end) if value) or None
             header = " | ".join(value for value in (label, company, dates) if value)
             lines.append(header)
-            details = _unique([
-                *_strings(item.get("summary")), *_strings(item.get("role_summary")),
-                *_strings(item.get("description")), *_strings(item.get("bullet_bank")),
-                *_strings(item.get("bullets")),
-            ])
-            lines.extend(f"- {detail}" for detail in details)
+            if location and location not in header:
+                lines.append(location)
+            details = CVBuilder._rank_texts(_item_details(item), context_terms)
+            selected = []
+            for detail in details:
+                key = " ".join(detail.casefold().split())
+                if key and key not in used_bullets:
+                    used_bullets.add(key)
+                    selected.append(detail)
+                if len(selected) >= max_bullets:
+                    break
+            lines.extend(f"- {detail}" for detail in selected)
 
     @staticmethod
     def _languages(value: Any) -> list[str]:
         if isinstance(value, dict):
             value = value.get("items", value)
             if isinstance(value, dict):
-                return [f"{name}: {level}" for name, level in value.items()]
+                return [
+                    f"{_clean_text(str(name))}: {_clean_text(str(level))}"
+                    for name, level in value.items()
+                ]
         if not isinstance(value, list):
             return []
         result = []
         for item in value:
             if isinstance(item, str):
-                result.append(item)
+                result.append(_clean_text(item))
             elif isinstance(item, dict) and item.get("name"):
-                level = item.get("proficiency") or item.get("level") or "mentioned"
-                result.append(f"{item['name']}: {level}")
-        return result
+                level = _clean_text(item.get("proficiency") or item.get("level") or "mentioned")
+                result.append(f"{_clean_text(item['name'])}: {level}")
+        return _unique(result)
+
+    @staticmethod
+    def _context_terms(
+        requirements: tuple[JobRequirement, ...],
+        evidence: tuple[EvidenceReference, ...],
+    ) -> tuple[str, ...]:
+        supported = {
+            item.requirement_id for item in evidence
+            if item.evidence_type is not EvidenceType.NO_EVIDENCE
+        }
+        preferred = [
+            item.name for item in requirements
+            if item.requirement_id in supported
+        ]
+        fallback = [
+            item.name for item in requirements
+            if item.category.value in {"role", "skill", "tool", "domain"}
+        ]
+        labels = [item.label for item in evidence if item.label]
+        return tuple(_unique([*preferred, *fallback, *labels]))
+
+    @staticmethod
+    def _rank_texts(values: Iterable[str], context_terms: tuple[str, ...]) -> list[str]:
+        unique = _unique(values)
+        return [
+            value for _, value in sorted(
+                enumerate(unique),
+                key=lambda pair: (-_score_text(pair[1], context_terms), pair[0]),
+            )
+        ]
+
+    @staticmethod
+    def _score_item(item: dict[str, Any], context_terms: tuple[str, ...]) -> int:
+        text = " ".join([
+            _field(item, "id") or "",
+            _field(item, "role", "name", "project_name", "title", "degree") or "",
+            _field(item, "company", "provider", "institution") or "",
+            " ".join(_item_details(item)),
+            " ".join(_strings(item.get("skills"))),
+            " ".join(_strings(item.get("tools"))),
+            " ".join(_strings(item.get("domains"))),
+        ])
+        return _score_text(text, context_terms)
+
+    @staticmethod
+    def _experience_blocks(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        ordered_keys: list[str] = []
+        for item in items:
+            company = _field(item, "company") or f"__item_{len(ordered_keys)}"
+            key = company.casefold()
+            if key not in grouped:
+                grouped[key] = dict(item)
+                grouped[key]["_items"] = [item]
+                grouped[key]["company"] = company if not company.startswith("__item_") else item.get("company")
+                ordered_keys.append(key)
+            else:
+                grouped[key]["_items"].append(item)
+        blocks: list[dict[str, Any]] = []
+        for key in ordered_keys:
+            block = grouped[key]
+            group_items = block.pop("_items")
+            if len(group_items) == 1:
+                blocks.append(block)
+                continue
+            roles = _unique(
+                _field(item, "role", "title", "name") or "Professional Experience"
+                for item in group_items
+            )
+            block["role"] = " / ".join(roles[:2])
+            block["summary"] = [
+                text for item in group_items for text in _item_details(item)
+            ]
+            block["skills"] = [
+                text for item in group_items for text in _strings(item.get("skills"))
+            ]
+            block["tools"] = [
+                text for item in group_items for text in _strings(item.get("tools"))
+            ]
+            block["domains"] = [
+                text for item in group_items for text in _strings(item.get("domains"))
+            ]
+            start_values = [
+                value for item in group_items
+                if (value := _field(item, "start_date", "start"))
+            ]
+            end_values = [
+                value for item in group_items
+                if (value := _field(item, "end_date", "end"))
+            ]
+            if start_values or end_values:
+                block["start_date"] = start_values[0] if start_values else None
+                block["end_date"] = end_values[-1] if end_values else None
+            blocks.append(block)
+        return blocks
+
+    @staticmethod
+    def _cv_text(lines: list[str]) -> str:
+        cleaned_lines = [_clean_text(line) if line else "" for line in lines]
+        text = "\n".join(cleaned_lines)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        return text + "\n"
 
     @staticmethod
     def _protected_facts(data: dict[str, Any]) -> list[str]:
