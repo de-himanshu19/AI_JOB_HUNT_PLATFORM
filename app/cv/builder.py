@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import textwrap
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -18,8 +19,8 @@ SUMMARY_WIDTH = 96
 SUMMARY_MAX_LINES = 5
 MAX_ACHIEVEMENTS = 3
 MAX_EXPERIENCE_ITEMS = 4
-MAX_EXPERIENCE_BULLETS = 4
-MAX_PROJECTS = 3
+MAX_EXPERIENCE_BULLETS = 3
+MAX_PROJECTS = 2
 MAX_PROJECT_BULLETS = 3
 MAX_CERTIFICATIONS = 5
 MAX_CERTIFICATION_BULLETS = 1
@@ -69,6 +70,20 @@ SKILL_GROUPS = (
     ("Business/Domain", ("bank", "compliance", "stakeholder", "coordination", "operation", "reporting", "aml", "kyc"), 7),
     ("Tools", ("sap", "salesforce", "servicenow", "github", "git", "office"), 7),
 )
+MONTHS = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
 
 
 def _clean_text(value: str) -> str:
@@ -81,15 +96,32 @@ def _clean_text(value: str) -> str:
             0xFDD0 <= code <= 0xFDEF
             or (code & 0xFFFF) in {0xFFFE, 0xFFFF}
         )
-        if char in {"\ufeff", "\ufffd"} or is_noncharacter:
+        category = unicodedata.category(char)
+        if (
+            char in {"\ufeff", "\ufffd"}
+            or is_noncharacter
+            or category in {"Cc", "Cf", "Co", "Cs", "Cn"}
+        ):
             cleaned.append(" ")
         elif char in {"\n", "\r", "\t"}:
             cleaned.append(" ")
-        elif code < 32 or 0x7F <= code <= 0x9F:
-            cleaned.append(" ")
         else:
             cleaned.append(char)
-    return re.sub(r"\s+", " ", "".join(cleaned)).strip()
+    text = re.sub(r"\s+", " ", "".join(cleaned)).strip()
+    return _fix_missing_spaces(text)
+
+
+def _fix_missing_spaces(text: str) -> str:
+    replacements = (
+        (r"\bData(?=Analysis\b)", "Data "),
+        (r"\bSLA(?=Breach\b)", "SLA "),
+        (r"\bfor(?=Data\b)", "for "),
+        (r"\bMBA(?=in\b)", "MBA "),
+        (r"Technology(?=GmbH\b)", "Technology "),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text)
+    return text
 
 
 def _items(data: dict[str, Any], name: str) -> list[dict[str, Any]]:
@@ -164,6 +196,63 @@ def _item_details(item: dict[str, Any]) -> list[str]:
         *_strings(item.get("bullets")), *_strings(item.get("achievements")),
         *_strings(item.get("metrics")),
     ])
+
+
+def _date_key(value: str | None, *, latest: bool = False) -> tuple[int, int]:
+    if not value:
+        return (9999, 12) if latest else (0, 0)
+    text = _clean_text(value).casefold()
+    if any(term in text for term in ("present", "current", "today", "ongoing")):
+        return (9999, 12)
+    numeric = re.search(r"\b(0?[1-9]|1[0-2])[/.-](\d{4})\b", text)
+    if numeric:
+        return (int(numeric.group(2)), int(numeric.group(1)))
+    year_month = re.search(r"\b(\d{4})[/.-](0?[1-9]|1[0-2])\b", text)
+    if year_month:
+        return (int(year_month.group(1)), int(year_month.group(2)))
+    named = re.search(
+        r"\b("
+        + "|".join(sorted(MONTHS, key=len, reverse=True))
+        + r")[a-z]*\.?\s+(\d{4})\b",
+        text,
+    )
+    if named:
+        return (int(named.group(2)), MONTHS[named.group(1).rstrip(".")])
+    year = re.search(r"\b(19|20)\d{2}\b", text)
+    if year:
+        return (int(year.group(0)), 12 if latest else 1)
+    return (9999, 12) if latest else (0, 0)
+
+
+def _date_range_value(values: Iterable[str], *, latest: bool) -> str | None:
+    dated = [
+        (index, _date_key(value, latest=latest), value)
+        for index, value in enumerate(values)
+        if value
+    ]
+    if not dated:
+        return None
+    if latest:
+        return max(dated, key=lambda item: (item[1], item[0]))[2]
+    return min(dated, key=lambda item: (item[1], item[0]))[2]
+
+
+def _complete_sentence_summary(text: str, fallback: str) -> str:
+    source = _clean_text(text) or _clean_text(fallback)
+    budget = SUMMARY_WIDTH * SUMMARY_MAX_LINES
+    sentences = re.findall(r".*?(?:[.!?](?=\s|$)|$)", source)
+    sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
+    if not sentences:
+        return source
+    selected: list[str] = []
+    for sentence in sentences:
+        candidate = " ".join([*selected, sentence]).strip()
+        if selected and len(candidate) > budget:
+            break
+        selected.append(sentence)
+        if len(candidate) >= budget:
+            break
+    return " ".join(selected) if selected else sentences[0]
 
 
 @dataclass(frozen=True)
@@ -249,11 +338,9 @@ class CVBuilder:
         if languages:
             lines.extend(["", "LANGUAGES", *[f"- {item}" for item in languages]])
 
-        additional = _unique(_strings(data.get("additional_information", [])))
-        for key in ("work_authorization", "availability"):
-            additional.extend(_strings(personal.get(key)))
+        additional = self._additional_information(data, personal)
         if additional:
-            lines.extend(["", "ADDITIONAL INFORMATION", *[f"- {item}" for item in _unique(additional)]])
+            lines.extend(["", "ADDITIONAL INFORMATION", *[f"- {item}" for item in additional]])
 
         cv_text = self._cv_text(lines)
         report = self._report(
@@ -288,17 +375,13 @@ class CVBuilder:
 
     @staticmethod
     def _wrap(text: str) -> list[str]:
-        shortened = textwrap.shorten(
-            _clean_text(text),
-            width=SUMMARY_WIDTH * SUMMARY_MAX_LINES,
-            placeholder=".",
-        )
+        shortened = _complete_sentence_summary(text, "")
         return textwrap.wrap(
             shortened,
             width=SUMMARY_WIDTH,
             break_long_words=False,
             break_on_hyphens=False,
-        )[:SUMMARY_MAX_LINES] or [shortened]
+        ) or [shortened]
 
     @staticmethod
     def _skill_groups(data, requirements, evidence) -> list[str]:
@@ -500,9 +583,12 @@ class CVBuilder:
                 value for item in group_items
                 if (value := _field(item, "end_date", "end"))
             ]
+            block.pop("dates", None)
+            block.pop("period", None)
+            block.pop("date", None)
             if start_values or end_values:
-                block["start_date"] = start_values[0] if start_values else None
-                block["end_date"] = end_values[-1] if end_values else None
+                block["start_date"] = _date_range_value(start_values, latest=False)
+                block["end_date"] = _date_range_value(end_values, latest=True)
             blocks.append(block)
         return blocks
 
@@ -512,6 +598,40 @@ class CVBuilder:
         text = "\n".join(cleaned_lines)
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
         return text + "\n"
+
+    @staticmethod
+    def _additional_information(
+        data: dict[str, Any],
+        personal: dict[str, Any],
+    ) -> list[str]:
+        values = _strings(data.get("additional_information", []))
+        for key in ("work_authorization", "availability"):
+            values.extend(_strings(personal.get(key)))
+        return CVBuilder._unique_semantic(values)
+
+    @staticmethod
+    def _unique_semantic(values: Iterable[str]) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        for value in _unique(values):
+            key = CVBuilder._semantic_key(value)
+            if key not in seen:
+                seen.add(key)
+                result.append(value)
+        return result
+
+    @staticmethod
+    def _semantic_key(value: str) -> str:
+        lowered = re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+        authorization_terms = (
+            "authorized to work", "authorised to work", "work authorization",
+            "work authorisation", "eu blue card", "visa",
+        )
+        if any(term in lowered for term in authorization_terms):
+            return "work_authorization"
+        if any(term in lowered for term in ("available immediately", "immediate availability", "availability")):
+            return "availability"
+        return lowered
 
     @staticmethod
     def _protected_facts(data: dict[str, Any]) -> list[str]:

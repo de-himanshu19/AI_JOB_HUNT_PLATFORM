@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from pathlib import Path
 
 from app.cv.builder import CVBuilder
@@ -64,18 +65,20 @@ def _noisy_profile() -> CandidateProfile:
             "and reconciliation evidence across banking and technical operations. "
             "This extra sentence should keep the summary controlled for FlowCV. "
             "Another long sentence keeps testing line wrapping without expanding "
-            "into a four page resume.\ufffe"
+            "into a four page resume. This final sentence should be omitted only "
+            "as a complete sentence, never as a fragment."
         ),
         "work_experience": {
             "items": [
                 {
                     "id": "gd-1",
                     "role": "Technical Reporting Analyst",
-                    "company": "G+D GmbH",
-                    "start_date": "Oct 2022",
-                    "end_date": "Jul 2025",
+                    "company": "Giesecke+Devrient Currency TechnologyGmbH",
+                    "dates": "01/2024 - 01/2025",
+                    "start_date": "01/2024",
+                    "end_date": "01/2025",
                     "bullet_bank": [
-                        "Prepared SQL validation reports for technical review.",
+                        "Prepared SQL validation reports forData review.",
                         "Prepared SQL validation reports for technical review.",
                         "Maintained dashboard documentation for stakeholders.",
                         "Coordinated service documentation in regulated operations.",
@@ -87,13 +90,14 @@ def _noisy_profile() -> CandidateProfile:
                 },
                 {
                     "id": "gd-2",
-                    "role": "Service Documentation Specialist",
-                    "company": "G+D GmbH",
-                    "start_date": "Oct 2023",
-                    "end_date": "Jul 2025",
+                    "role": "Service Documentation Specialist SLA\ufffeBreach",
+                    "company": "Giesecke+Devrient Currency TechnologyGmbH",
+                    "start_date": "10/2022",
+                    "end_date": "07/2025",
                     "bullet_bank": [
                         "Used Excel to reconcile service records.",
                         "Tracked quality findings for reporting handovers.",
+                        "Supported cross\ue000functional social\ufffemedia digital\uf8fftransformation notes.",
                     ],
                     "skills": ["Excel", "reconciliation", "reporting"],
                 },
@@ -101,6 +105,9 @@ def _noisy_profile() -> CandidateProfile:
                     "id": "pnb",
                     "role": "Banking Associate",
                     "company": "Punjab National Bank",
+                    "dates": "08/2017 - 09/2017",
+                    "start_date": "08/2017",
+                    "end_date": "09/2017",
                     "bullet_bank": [
                         "Performed data validation for branch reporting.",
                         "Coordinated stakeholder updates for banking operations.",
@@ -109,13 +116,26 @@ def _noisy_profile() -> CandidateProfile:
                     "tools": ["Salesforce CRM", "ServiceNow"],
                     "domains": ["banking operations", "compliance"],
                 },
+                {
+                    "id": "pnb-early",
+                    "role": "Operations Reporting Associate",
+                    "company": "Punjab National Bank",
+                    "start_date": "07/2014",
+                    "end_date": "11/2021",
+                    "bullet_bank": [
+                        "Prepared banking reports and validation checks.",
+                        "Coordinated compliance reporting with branch stakeholders.",
+                    ],
+                    "skills": ["reporting", "validation"],
+                    "domains": ["banking operations", "compliance"],
+                },
             ]
         },
         "projects": {
             "items": [
                 {
                     "id": "platform",
-                    "name": "AI Job Hunt Platform",
+                    "name": "AI Job Hunt Platform DataAnalysis",
                     "bullet_bank": [
                         "Built SQLite-backed job data workflows.",
                         "Implemented rule-based ranking and reconciliation.",
@@ -152,7 +172,7 @@ def _noisy_profile() -> CandidateProfile:
                 },
             ]
         },
-        "education": {"items": [{"degree": "Business degree"}]},
+        "education": {"items": [{"degree": "MBAin International Management"}]},
         "skills_and_tools": {
             "data": ["SQL", "Excel", "Python", "Pandas", "data cleaning", "validation", "reconciliation"],
             "bi": ["Power BI", "Tableau", "KPI reporting", "dashboards"],
@@ -165,6 +185,14 @@ def _noisy_profile() -> CandidateProfile:
             {"name": "English", "proficiency": "fluent"},
             {"name": "German", "proficiency": "A2 and actively improving"},
         ],
+        "additional_information": {
+            "items": [
+                "EU Blue Card holder - authorized to work in Germany.",
+                "Authorized to work in Germany via EU Blue Card.",
+                "Available immediately.",
+                "Immediate availability.",
+            ]
+        },
     }
     return CandidateProfile.from_master_cv(payload, version=1, profile_key="noisy")
 
@@ -225,13 +253,29 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
     text = build.cv_text
     assert "\ufffe" not in text
     assert "\x00" not in text
-    assert len(text.splitlines()) <= 90
+    assert all(
+        char == "\n"
+        or unicodedata.category(char) not in {"Cc", "Cf", "Co", "Cs", "Cn"}
+        for char in text
+    )
+    assert len(text.splitlines()) <= 80
     assert text.count("Prepared SQL validation reports for technical review.") == 1
-    assert text.count("G+D GmbH") == 1
+    assert text.count("Giesecke+Devrient Currency Technology GmbH") == 1
     assert "Extra Project" not in text
+    assert "DataAnalysis" not in text
+    assert "SLABreach" not in text
+    assert "forData" not in text
+    assert "MBAin" not in text
+    assert "TechnologyGmbH" not in text
+    assert "Data Analysis" in text
+    assert "SLA Breach" in text
+    assert "for Data" in text
+    assert "MBA in" in text
 
     summary_lines = [line for line in _section(text, "PROFESSIONAL SUMMARY") if line]
     assert 1 <= len(summary_lines) <= 5
+    assert summary_lines[-1].endswith(".")
+    assert not " ".join(summary_lines).endswith("as a fragment")
 
     skills = "\n".join(_section(text, "KEY SKILLS"))
     assert "Data Analysis:" in skills
@@ -250,8 +294,16 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
         line for line in _section(text, "PROFESSIONAL EXPERIENCE")
         if line.startswith("- ")
     ]
-    assert len(experience_bullets) <= 8
-    assert "Prepared SQL validation reports for technical review." in experience_bullets[0]
+    assert len(experience_bullets) <= 6
+    assert "Prepared SQL validation reports for Data review." in experience_bullets[0]
+
+    experience = "\n".join(_section(text, "PROFESSIONAL EXPERIENCE"))
+    assert "Giesecke+Devrient Currency Technology GmbH | 10/2022 - 07/2025" in experience
+    assert "Punjab National Bank | 07/2014 - 11/2021" in experience
+
+    additional = "\n".join(_section(text, "ADDITIONAL INFORMATION"))
+    assert additional.count("authorized to work") == 1
+    assert additional.casefold().count("availability") + additional.casefold().count("available immediately") == 1
 
 
 def test_rule_builder_limits_projects_to_job_relevant_short_blocks() -> None:
@@ -261,9 +313,9 @@ def test_rule_builder_limits_projects_to_job_relevant_short_blocks() -> None:
         line for line in project_lines
         if line and not line.startswith("- ") and "|" not in line
     ]
-    assert len(project_headers) <= 3
+    assert len(project_headers) <= 2
     assert "BI Dashboard" in project_headers
-    assert "AI Job Hunt Platform" in project_headers
+    assert "AI Job Hunt Platform Data Analysis" in project_headers
     for header in project_headers:
         start = project_lines.index(header) + 1
         following = []

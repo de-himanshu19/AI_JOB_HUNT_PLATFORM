@@ -36,7 +36,7 @@ The rule-based FlowCV formatter targets a concise two-page copy-paste draft for
 Data Analyst-style applications. It caps the professional summary at five
 wrapped lines, groups skills separately from languages, combines same-company
 experience blocks, limits each role to a small set of strongest JD-relevant
-bullets, limits projects to the top three with at most three bullets each, and
+bullets, limits projects to the top two with at most three bullets each, and
 removes broken Unicode/control characters before writing the artifact. Job-fit
 evidence still drives selection; unsupported skills or stronger language claims
 remain excluded by the validator.
