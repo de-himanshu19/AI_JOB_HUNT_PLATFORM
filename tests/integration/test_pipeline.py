@@ -12,6 +12,7 @@ from app.config import settings_from_mapping
 from app.db.connection import Database
 from app.db.migrations import migrate
 from app.domain.enums import DescriptionCompleteness, JobSource
+from app.services.applications import ApplicationService
 from app.services.pipeline import PipelineRunRequest, PipelineService
 
 from tests.integration.test_fit_analysis_persistence import (
@@ -88,8 +89,31 @@ def test_pipeline_without_live_collect_uses_stored_jobs_and_no_external_collecti
     assert summary["notification_preview"]["network_requested"] is False
     assert summary["notification_preview"]["database_modified"] is False
     assert summary["top_jobs"][0]["title"] == "Data Analyst"
+    assert summary["top_jobs"][0]["application_status"] is None
     assert output.is_file()
     assert json.loads(output.read_text(encoding="utf-8"))["profile_id"] == str(profile.id)
+    with database.read_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0] == 0
+
+
+def test_pipeline_top_jobs_include_existing_application_status(tmp_path) -> None:
+    settings, database, _ = _service(tmp_path)
+    profile, job = _seed_stored_job(database)
+    ApplicationService(database).shortlist_job(profile.id, job.id, priority="high")
+
+    service = PipelineService(
+        database,
+        settings,
+        _rules(),
+        now=lambda: datetime(2026, 7, 9, 10, 0, tzinfo=UTC),
+    )
+    summary = service.run(PipelineRunRequest(profile_id=profile.id))
+
+    assert summary["top_jobs"][0]["application_status"] == "shortlisted"
+    assert any(
+        "applications shortlist" in action
+        for action in summary["next_actions"]
+    )
 
 
 def test_pipeline_validates_profile_id(tmp_path) -> None:

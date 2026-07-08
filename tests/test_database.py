@@ -46,7 +46,7 @@ EXPECTED_TABLES = {
 
 def test_database_creation_from_zero_and_repeatable_migrations(tmp_path: Path) -> None:
     db = Database(tmp_path / "new/db.sqlite3")
-    assert migrate(db) == [1, 2, 3, 4, 5, 6, 7]
+    assert migrate(db) == [1, 2, 3, 4, 5, 6, 7, 8]
     assert migrate(db) == []
 
     with db.read_connection() as connection:
@@ -59,7 +59,7 @@ def test_database_creation_from_zero_and_repeatable_migrations(tmp_path: Path) -
         assert EXPECTED_TABLES <= tables
         assert connection.execute(
             "SELECT COUNT(*) AS count FROM schema_migrations"
-        ).fetchone()["count"] == 7
+        ).fetchone()["count"] == 8
 
 
 def test_migration_003_upgrades_existing_database_without_losing_jobs(
@@ -82,7 +82,7 @@ def test_migration_003_upgrades_existing_database_without_losing_jobs(
     with database.transaction() as connection:
         JobRepository(connection).create(existing_job)
 
-    assert migrate(database) == [3, 4, 5, 6, 7]
+    assert migrate(database) == [3, 4, 5, 6, 7, 8]
     with database.read_connection() as connection:
         assert JobRepository(connection).get(existing_job.id) == existing_job
         job_columns = {
@@ -189,7 +189,7 @@ def test_migration_004_preserves_version_003_data_and_foreign_keys(
             (ids["artifact"], ids["job"], str(profile.id), ids["analysis"], now),
         )
 
-    assert migrate(database) == [4, 5, 6, 7]
+    assert migrate(database) == [4, 5, 6, 7, 8]
     with database.read_connection() as connection:
         for table in (
             "jobs", "job_descriptions", "candidate_profiles",
@@ -236,7 +236,7 @@ def test_migration_005_preserves_version_004_rankings_and_notifications(
     with database.transaction() as connection:
         NotificationRepository(connection).create(old_notification)
 
-    assert migrate(database) == [5, 6, 7]
+    assert migrate(database) == [5, 6, 7, 8]
     assert migrate(database) == []
     with database.read_connection() as connection:
         assert connection.execute(
@@ -283,7 +283,7 @@ def test_migration_006_is_additive_and_preserves_version_005_data(
             (str(job.id), str(profile.id)),
         )
 
-    assert migrate(database) == [6, 7]
+    assert migrate(database) == [6, 7, 8]
     assert migrate(database) == []
     with database.read_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1
@@ -316,7 +316,7 @@ def test_migration_007_is_additive_and_preserves_version_006_data(
     profile, seeded = seed_ranked_vacancies(database, 1)
     job = seeded[0][0]
 
-    assert migrate(database) == [7]
+    assert migrate(database) == [7, 8]
     assert migrate(database) == []
     with database.read_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1
@@ -341,6 +341,61 @@ def test_migration_007_is_additive_and_preserves_version_006_data(
             "legacy_notification_suppressions",
             "legacy_artifacts",
         } <= tables
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_migration_008_extends_application_tracking_and_preserves_history(
+    tmp_path: Path,
+) -> None:
+    through_007 = tmp_path / "through_007"
+    through_007.mkdir()
+    migration_root = Path(__file__).parents[1] / "migrations"
+    for name in (
+        "001_initial.sql", "002_arbeitsagentur_collection.sql",
+        "003_normalization_duplicates.sql", "004_fit_analysis_ranking.sql",
+        "005_telegram_notifications.sql", "006_cv_generation.sql",
+        "007_legacy_import.sql",
+    ):
+        shutil.copy2(migration_root / name, through_007 / name)
+    database = Database(tmp_path / "m8.sqlite3")
+    assert migrate(database, directory=through_007) == [1, 2, 3, 4, 5, 6, 7]
+
+    from tests.notification_helpers import seed_ranked_vacancies
+    profile, seeded = seed_ranked_vacancies(database, 1)
+    job = seeded[0][0]
+    with database.transaction() as connection:
+        connection.execute(
+            """INSERT INTO applications
+            (id, job_id, profile_id, status, created_at, updated_at)
+            VALUES ('legacy-app', ?, ?, 'shortlisted', '2026-07-08', '2026-07-08')""",
+            (str(job.id), str(profile.id)),
+        )
+        connection.execute(
+            """INSERT INTO application_events
+            (id, application_id, from_status, to_status, reason, created_at)
+            VALUES ('legacy-event', 'legacy-app', 'new', 'shortlisted',
+                    'legacy note', '2026-07-08')"""
+        )
+
+    assert migrate(database) == [8]
+    assert migrate(database) == []
+    with database.read_connection() as connection:
+        application = connection.execute(
+            "SELECT * FROM applications WHERE id = 'legacy-app'"
+        ).fetchone()
+        event = connection.execute(
+            "SELECT * FROM application_events WHERE id = 'legacy-event'"
+        ).fetchone()
+        indexes = {
+            row["name"]
+            for row in connection.execute("PRAGMA index_list(applications)")
+        }
+        assert application["current_status"] == "shortlisted"
+        assert application["priority"] is None
+        assert application["notes"] == ""
+        assert event["event_type"] == "status_changed"
+        assert event["note"] == "legacy note"
+        assert "uq_applications_profile_cluster" in indexes
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 

@@ -17,12 +17,13 @@ from app.db.repositories import (
     JobRepository,
 )
 from app.domain.duplicates import ReviewStatus
-from app.domain.enums import JobSource
+from app.domain.enums import ApplicationStatus, JobSource
 from app.domain.legacy_import import LegacyArtifactKind, LegacyImportPlan, LegacySourceType
 from app.logging_config import configure_logging
 from app.services.collection import CollectionService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION, CVGenerationService
 from app.services.analysis_rules import AnalysisRules
+from app.services.applications import ApplicationService
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
 from app.services.legacy_import import LegacyImportService
@@ -177,6 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
     cv_generate.add_argument("--ai-polish", action="store_true")
     cv_generate.add_argument("--live-ai", action="store_true")
     cv_generate.add_argument("--force-regenerate", action="store_true")
+    cv_generate.add_argument("--mark-cv-ready", action="store_true")
     cv_manual = cv_commands.add_parser("generate-manual")
     cv_manual.add_argument("--description-file", type=Path, required=True)
     cv_manual.add_argument("--profile-id", required=True)
@@ -237,6 +239,48 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_run.add_argument("--include-prefilter-only", action="store_true")
     pipeline_run.add_argument("--output", type=Path)
     pipeline_run.add_argument("--no-dashboard-hint", action="store_true")
+
+    applications = commands.add_parser(
+        "applications", help="Track job applications locally"
+    )
+    application_commands = applications.add_subparsers(
+        dest="applications_command", required=True
+    )
+    app_shortlist = application_commands.add_parser("shortlist")
+    app_shortlist.add_argument("--profile-id", required=True)
+    app_shortlist.add_argument("--job-id", required=True)
+    app_shortlist.add_argument("--priority", choices=["high", "medium", "low"])
+    app_shortlist.add_argument("--note")
+    app_skip = application_commands.add_parser("skip")
+    app_skip.add_argument("--profile-id", required=True)
+    app_skip.add_argument("--job-id", required=True)
+    app_skip.add_argument("--note")
+    app_status = application_commands.add_parser("set-status")
+    app_status.add_argument("--profile-id", required=True)
+    app_status.add_argument("--job-id", required=True)
+    app_status.add_argument(
+        "--status", required=True, choices=[item.value for item in ApplicationStatus]
+    )
+    app_status.add_argument("--note")
+    app_cv = application_commands.add_parser("cv-ready")
+    app_cv.add_argument("--profile-id", required=True)
+    app_cv.add_argument("--job-id", required=True)
+    app_cv.add_argument("--cv-artifact-id")
+    app_cv.add_argument("--note")
+    app_follow = application_commands.add_parser("follow-up")
+    app_follow.add_argument("--profile-id", required=True)
+    app_follow.add_argument("--job-id", required=True)
+    app_follow.add_argument("--date", required=True)
+    app_follow.add_argument("--note")
+    app_list = application_commands.add_parser("list")
+    app_list.add_argument("--profile-id", required=True)
+    app_list.add_argument("--status", choices=[item.value for item in ApplicationStatus])
+    app_due = application_commands.add_parser("due")
+    app_due.add_argument("--profile-id", required=True)
+    app_due.add_argument("--date")
+    app_history = application_commands.add_parser("history")
+    app_history.add_argument("--profile-id", required=True)
+    app_history.add_argument("--job-id", required=True)
     return parser
 
 
@@ -783,6 +827,43 @@ def _artifact_json(artifact):
     }
 
 
+def _application_json(application):
+    return {
+        "id": str(application.id),
+        "profile_id": str(application.profile_id),
+        "job_id": str(application.job_id),
+        "logical_cluster_id": (
+            str(application.logical_cluster_id)
+            if application.logical_cluster_id else None
+        ),
+        "current_status": application.status.value,
+        "priority": application.priority.value if application.priority else None,
+        "notes": application.notes,
+        "follow_up_date": (
+            application.follow_up_date.isoformat()
+            if application.follow_up_date else None
+        ),
+        "cv_artifact_id": (
+            str(application.cv_artifact_id) if application.cv_artifact_id else None
+        ),
+        "source": application.source,
+        "created_at": application.created_at.isoformat(),
+        "updated_at": application.updated_at.isoformat(),
+    }
+
+
+def _application_event_json(event):
+    return {
+        "id": str(event.id),
+        "application_id": str(event.application_id),
+        "old_status": event.from_status.value if event.from_status else None,
+        "new_status": event.to_status.value,
+        "event_type": event.event_type,
+        "note": event.note,
+        "created_at": event.created_at.isoformat(),
+    }
+
+
 def _cv(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging(settings)
@@ -841,6 +922,83 @@ def _cv(args: argparse.Namespace) -> int:
         "suggested_next_state": "cv_ready",
         "application_status_changed": False,
     }
+    if (
+        args.cv_command == "generate"
+        and getattr(args, "mark_cv_ready", False)
+    ):
+        application = ApplicationService(database).mark_cv_ready(
+            args.profile_id,
+            args.job_id,
+            cv_artifact_id=result.rule_based_artifact.id,
+            note="CV generated and marked ready from CLI",
+        )
+        output["application_status_changed"] = True
+        output["application"] = _application_json(application)
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _applications(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    service = ApplicationService(database)
+    command = args.applications_command
+    if command == "shortlist":
+        output = _application_json(service.shortlist_job(
+            args.profile_id, args.job_id, priority=args.priority, note=args.note
+        ))
+    elif command == "skip":
+        output = _application_json(service.skip_job(
+            args.profile_id, args.job_id, note=args.note
+        ))
+    elif command == "set-status":
+        output = _application_json(service.set_status(
+            profile_id=args.profile_id,
+            job_id=args.job_id,
+            status=args.status,
+            note=args.note,
+        ))
+    elif command == "cv-ready":
+        output = _application_json(service.mark_cv_ready(
+            args.profile_id,
+            args.job_id,
+            cv_artifact_id=args.cv_artifact_id,
+            note=args.note,
+        ))
+    elif command == "follow-up":
+        output = _application_json(service.set_follow_up(
+            profile_id=args.profile_id,
+            job_id=args.job_id,
+            follow_up_date=args.date,
+            note=args.note,
+        ))
+    elif command == "list":
+        output = [
+            _application_json(item)
+            for item in service.list_applications(args.profile_id, args.status)
+        ]
+    elif command == "due":
+        output = [
+            _application_json(item)
+            for item in service.list_due_followups(args.profile_id, args.date)
+        ]
+    elif command == "history":
+        with database.read_connection() as connection:
+            application = service._resolve_application(  # noqa: SLF001 - CLI read helper.
+                connection,
+                application_id=None,
+                profile_id=args.profile_id,
+                job_id=args.job_id,
+                create=False,
+            )
+        output = [
+            _application_event_json(item)
+            for item in service.history(application.id)
+        ]
+    else:
+        raise AssertionError("Unhandled applications command")
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
@@ -1000,6 +1158,8 @@ def main(argv: list[str] | None = None) -> int:
         return _legacy(args)
     if args.command == "pipeline":
         return _pipeline(args)
+    if args.command == "applications":
+        return _applications(args)
     raise AssertionError("Unhandled command")
 
 

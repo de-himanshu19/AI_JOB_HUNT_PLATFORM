@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from app.domain.application import Application, ApplicationEvent
+from app.domain.application import Application, ApplicationEvent, ApplicationPriority
 from app.domain.analysis import JobAnalysis, JobRanking
 from app.domain.candidate import CandidateProfile
 from app.domain.cv import CVAIAttempt, CVGenerationArtifact
@@ -48,12 +48,23 @@ from app.domain.operations import (
 )
 
 
+_UNSET = object()
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
 def _dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
+
+
+def _date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
+
+
+def _optional(row: sqlite3.Row, key: str):
+    return row[key] if key in row.keys() else None
 
 
 def _uuid(value: str | None) -> UUID | None:
@@ -398,11 +409,21 @@ class ApplicationRepository:
     def create(self, application: Application) -> Application:
         self.connection.execute(
             """INSERT INTO applications
-            (id, job_id, profile_id, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)""",
+            (id, job_id, profile_id, logical_cluster_id, status, current_status,
+             priority, notes, follow_up_date, cv_artifact_id, source,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(application.id), str(application.job_id), str(application.profile_id),
-                application.status.value, _iso(application.created_at),
+                str(application.logical_cluster_id) if application.logical_cluster_id else None,
+                application.status.value, application.status.value,
+                application.priority.value if application.priority else None,
+                application.notes,
+                application.follow_up_date.isoformat()
+                if application.follow_up_date else None,
+                str(application.cv_artifact_id) if application.cv_artifact_id else None,
+                application.source,
+                _iso(application.created_at),
                 _iso(application.updated_at),
             ),
         )
@@ -416,9 +437,36 @@ class ApplicationRepository:
             return None
         return Application(
             id=row["id"], job_id=row["job_id"], profile_id=row["profile_id"],
-            status=row["status"], created_at=_dt(row["created_at"]),
+            logical_cluster_id=_optional(row, "logical_cluster_id"),
+            status=row["status"],
+            priority=_optional(row, "priority"),
+            notes=_optional(row, "notes") or "",
+            follow_up_date=_date(_optional(row, "follow_up_date")),
+            cv_artifact_id=_optional(row, "cv_artifact_id"),
+            source=_optional(row, "source") or "manual",
+            created_at=_dt(row["created_at"]),
             updated_at=_dt(row["updated_at"]),
         )
+
+    def get_by_profile_job(
+        self, profile_id: UUID | str, job_id: UUID | str
+    ) -> Application | None:
+        row = self.connection.execute(
+            """SELECT * FROM applications
+            WHERE profile_id = ? AND job_id = ?""",
+            (str(profile_id), str(job_id)),
+        ).fetchone()
+        return self._from_row(row) if row else None
+
+    def get_by_profile_cluster(
+        self, profile_id: UUID | str, logical_cluster_id: UUID | str
+    ) -> Application | None:
+        row = self.connection.execute(
+            """SELECT * FROM applications
+            WHERE profile_id = ? AND logical_cluster_id = ?""",
+            (str(profile_id), str(logical_cluster_id)),
+        ).fetchone()
+        return self._from_row(row) if row else None
 
     def update_status(
         self,
@@ -428,12 +476,109 @@ class ApplicationRepository:
         updated_at: datetime,
     ) -> None:
         cursor = self.connection.execute(
-            """UPDATE applications SET status = ?, updated_at = ?
+            """UPDATE applications
+            SET status = ?, current_status = ?, updated_at = ?
             WHERE id = ? AND status = ?""",
-            (new_status.value, _iso(updated_at), str(application_id), expected.value),
+            (
+                new_status.value, new_status.value, _iso(updated_at),
+                str(application_id), expected.value,
+            ),
         )
         if cursor.rowcount != 1:
             raise RuntimeError("Application status changed concurrently")
+
+    def update_metadata(
+        self,
+        application_id: UUID | str,
+        *,
+        priority: ApplicationPriority | None | object = _UNSET,
+        notes: str | object = _UNSET,
+        follow_up_date: str | None | object = _UNSET,
+        cv_artifact_id: UUID | str | None | object = _UNSET,
+        updated_at: datetime,
+    ) -> Application:
+        assignments = ["updated_at = ?"]
+        parameters: list[object] = [_iso(updated_at)]
+        if priority is not _UNSET:
+            assignments.append("priority = ?")
+            parameters.append(priority.value if priority else None)
+        if notes is not _UNSET:
+            assignments.append("notes = ?")
+            parameters.append(str(notes))
+        if follow_up_date is not _UNSET:
+            assignments.append("follow_up_date = ?")
+            parameters.append(str(follow_up_date) if follow_up_date else None)
+        if cv_artifact_id is not _UNSET:
+            assignments.append("cv_artifact_id = ?")
+            parameters.append(str(cv_artifact_id) if cv_artifact_id else None)
+        parameters.append(str(application_id))
+        self.connection.execute(
+            f"UPDATE applications SET {', '.join(assignments)} WHERE id = ?",
+            parameters,
+        )
+        application = self.get(application_id)
+        if application is None:
+            raise KeyError(f"Application not found: {application_id}")
+        return application
+
+    def resolve_cluster_id(self, job_id: UUID | str) -> str | None:
+        row = self.connection.execute(
+            """SELECT cluster_id FROM job_duplicate_links
+            WHERE job_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1""",
+            (str(job_id),),
+        ).fetchone()
+        return row["cluster_id"] if row else None
+
+    def list(
+        self,
+        *,
+        profile_id: UUID | str | None = None,
+        status: ApplicationStatus | None = None,
+    ) -> list[Application]:
+        clauses = []
+        parameters: list[object] = []
+        if profile_id:
+            clauses.append("profile_id = ?")
+            parameters.append(str(profile_id))
+        if status:
+            clauses.append("status = ?")
+            parameters.append(status.value)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"SELECT * FROM applications {where} ORDER BY updated_at DESC, id",
+            parameters,
+        ).fetchall()
+        return [self._from_row(row) for row in rows]
+
+    def list_due_followups(
+        self, profile_id: UUID | str, due_on_or_before: str
+    ) -> list[Application]:
+        rows = self.connection.execute(
+            """SELECT * FROM applications
+            WHERE profile_id = ?
+              AND follow_up_date IS NOT NULL
+              AND follow_up_date <= ?
+              AND status NOT IN ('rejected', 'withdrawn', 'skipped')
+            ORDER BY follow_up_date, updated_at DESC, id""",
+            (str(profile_id), due_on_or_before),
+        ).fetchall()
+        return [self._from_row(row) for row in rows]
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> Application:
+        return Application(
+            id=row["id"], job_id=row["job_id"], profile_id=row["profile_id"],
+            logical_cluster_id=_optional(row, "logical_cluster_id"),
+            status=row["status"],
+            priority=_optional(row, "priority"),
+            notes=_optional(row, "notes") or "",
+            follow_up_date=_date(_optional(row, "follow_up_date")),
+            cv_artifact_id=_optional(row, "cv_artifact_id"),
+            source=_optional(row, "source") or "manual",
+            created_at=_dt(row["created_at"]), updated_at=_dt(row["updated_at"]),
+        )
 
 
 class ApplicationEventRepository:
@@ -443,12 +588,15 @@ class ApplicationEventRepository:
     def create(self, event: ApplicationEvent) -> ApplicationEvent:
         self.connection.execute(
             """INSERT INTO application_events
-            (id, application_id, from_status, to_status, reason, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)""",
+            (id, application_id, from_status, to_status, event_type, reason, note,
+             created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(event.id), str(event.application_id),
                 event.from_status.value if event.from_status else None,
-                event.to_status.value, event.reason, _iso(event.created_at),
+                event.to_status.value, event.event_type, event.reason,
+                event.note if event.note is not None else event.reason,
+                _iso(event.created_at),
             ),
         )
         return event
@@ -465,7 +613,9 @@ class ApplicationEventRepository:
             ApplicationEvent(
                 id=row["id"], application_id=row["application_id"],
                 from_status=row["from_status"], to_status=row["to_status"],
-                reason=row["reason"], created_at=_dt(row["created_at"]),
+                event_type=_optional(row, "event_type") or "status_changed",
+                reason=row["reason"], note=_optional(row, "note"),
+                created_at=_dt(row["created_at"]),
             )
             for row in rows
         ]

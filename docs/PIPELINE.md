@@ -8,7 +8,7 @@ collect jobs -> deduplicate -> analyze -> rank -> notification preview -> top jo
 
 The pipeline reuses existing services. It does not add scoring rules, source
 parsers, live Telegram sending, AI polish, CV generation, auto-apply, deletion,
-or dashboard rewrites.
+application-status mutation, or dashboard rewrites.
 
 ## Safe Dry Run
 
@@ -72,14 +72,25 @@ data/pipeline_runs/pipeline_<timestamp>.json
 Generated pipeline summaries are local runtime artifacts and are ignored by
 Git.
 
+`top_jobs` includes `application_status` when a ranked job is already tracked.
+The pipeline does not create, shortlist, skip, or update applications. Its
+`next_actions` suggest an explicit shortlist command for the top match, for
+example:
+
+```powershell
+python -m app.cli applications shortlist --profile-id <PROFILE_ID> --job-id <JOB_ID> --priority high --note "Top ranked match"
+```
+
 ## Daily Workflow
 
 1. Run the pipeline with stored jobs for a safe local refresh.
 2. Add `--live-collect` only when you want external source requests.
 3. Review `top_jobs` in the JSON output or open the dashboard.
-4. Generate a CV manually for a selected stored full-description job:
+4. Shortlist selected jobs explicitly.
+5. Generate a CV manually for a selected stored full-description job:
 
 ```powershell
 python -m app.dashboard
+python -m app.cli applications shortlist --profile-id <PROFILE_ID> --job-id <JOB_ID> --priority high
 python -m app.cli cv generate --job-id <JOB_ID> --profile-id <PROFILE_ID> --force-regenerate
 ```

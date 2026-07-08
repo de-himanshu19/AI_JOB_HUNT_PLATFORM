@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from dataclasses import asdict
 
 import streamlit as st
@@ -396,14 +397,42 @@ def applications_page() -> None:
         "A deliberate lifecycle board. Nothing here submits an application or changes state without confirmation.",
         eyebrow="Pipeline",
     )
+    profile_id = _profile_id()
     status = st.selectbox("Status", ["All", *[item.value for item in ApplicationStatus]])
+    all_applications = context.queries.applications(profile_id)
     applications = context.queries.applications(
-        _profile_id(), None if status == "All" else status
+        profile_id, None if status == "All" else status
     )
+    counts = {item.value: 0 for item in ApplicationStatus}
+    due_followups = 0
+    today = datetime.now(UTC).date().isoformat()
+    for item in all_applications:
+        counts[str(item["status"])] = counts.get(str(item["status"]), 0) + 1
+        follow_up = item.get("follow_up_date")
+        if (
+            follow_up
+            and str(follow_up) <= today
+            and item["status"] not in {"rejected", "withdrawn", "skipped"}
+        ):
+            due_followups += 1
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Tracked", len(all_applications))
+    metric_columns[1].metric("Shortlisted", counts.get("shortlisted", 0))
+    metric_columns[2].metric("Applied", counts.get("applied", 0))
+    metric_columns[3].metric("Due follow-ups", due_followups)
     if not applications:
         st.info("No tracked applications match this view.")
         return
-    st.dataframe(applications, use_container_width=True, hide_index=True)
+    table_columns = [
+        "current_status", "priority", "title_raw", "company_raw", "location_raw",
+        "rank_score", "fit_score", "follow_up_date", "updated_at",
+        "notes_preview",
+    ]
+    st.dataframe(
+        [{key: item.get(key) for key in table_columns} for item in applications],
+        use_container_width=True,
+        hide_index=True,
+    )
     selected = st.selectbox(
         "Application",
         [str(item["id"]) for item in applications],
@@ -438,6 +467,82 @@ def applications_page() -> None:
                         st.success("Application status updated.")
                 except Exception as error:
                     safe_error(error)
+    st.markdown("**Quick CRM actions**")
+    priority = st.selectbox(
+        "Priority", ["", "high", "medium", "low"], key="applications-priority"
+    )
+    quick_note = st.text_input("Action note", key="applications-note")
+    follow_up = st.date_input("Follow-up date", key="applications-follow-up")
+    action_confirmed = st.checkbox(
+        "Confirm application action", key="applications-action-confirm"
+    )
+    action_columns = st.columns(5)
+    quick_actions = (
+        ("Shortlist", "shortlisted"),
+        ("Skip", "skipped"),
+        ("Applied", "applied"),
+        ("Rejected", "rejected"),
+    )
+    for column, (label, next_status) in zip(action_columns[:4], quick_actions):
+        if column.button(label):
+            if not action_confirmed:
+                st.warning("Confirm the application action first.")
+            else:
+                try:
+                    if next_status == "shortlisted":
+                        result = execute_once(
+                            f"application-shortlist:{selected}",
+                            lambda: context.actions.shortlist_application(
+                                str(application["job_id"]),
+                                profile_id,
+                                priority=priority or None,
+                                note=quick_note or None,
+                            ),
+                        )
+                    else:
+                        result = execute_once(
+                            f"application-status:{selected}:{next_status}",
+                            lambda s=next_status: context.actions.set_application_status(
+                                str(application["job_id"]),
+                                profile_id,
+                                s,
+                                note=quick_note or None,
+                            ),
+                        )
+                    if result:
+                        st.success("Application updated.")
+                except Exception as error:
+                    safe_error(error)
+    if action_columns[4].button("Set follow-up"):
+        if not action_confirmed:
+            st.warning("Confirm the application action first.")
+        else:
+            try:
+                result = execute_once(
+                    f"application-follow-up:{selected}:{follow_up.isoformat()}",
+                    lambda: context.actions.set_application_follow_up(
+                        selected,
+                        follow_up.isoformat(),
+                        note=quick_note or None,
+                    ),
+                )
+                if result:
+                    st.success("Follow-up saved.")
+            except Exception as error:
+                safe_error(error)
+    if st.button("Add note"):
+        if not action_confirmed:
+            st.warning("Confirm the application action first.")
+        else:
+            try:
+                result = execute_once(
+                    f"application-note:{selected}:{quick_note}",
+                    lambda: context.actions.add_application_note(selected, quick_note),
+                )
+                if result:
+                    st.success("Note saved.")
+            except Exception as error:
+                safe_error(error)
 
 
 def cv_builder_page() -> None:

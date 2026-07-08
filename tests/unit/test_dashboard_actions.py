@@ -53,7 +53,9 @@ def test_application_actions_use_existing_transition_rules_and_are_idempotent(tm
     application, reused = actions.start_tracking(job.id, profile.id)
     same, second_reused = actions.start_tracking(job.id, profile.id)
     assert not reused and second_reused and same.id == application.id
-    assert actions.allowed_transitions(application.id) == ("shortlisted", "skipped")
+    assert actions.allowed_transitions(application.id) == (
+        "shortlisted", "skipped", "withdrawn"
+    )
     with pytest.raises(InvalidStatusTransition):
         actions.transition_application(application.id, ApplicationStatus.APPLIED.value)
     changed = actions.transition_application(

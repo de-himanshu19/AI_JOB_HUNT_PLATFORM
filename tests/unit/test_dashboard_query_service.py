@@ -11,6 +11,7 @@ from app.db.repositories import CandidateProfileRepository, JobDescriptionReposi
 from app.domain.enums import DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
 from app.services.analysis_rules import AnalysisRules
+from app.services.applications import ApplicationService
 from app.services.deduplication import DeduplicationService
 from app.services.ranking import RankingService
 
@@ -116,3 +117,19 @@ def test_sort_whitelist_ignores_unknown_sort_expression(database: Database) -> N
     assert result.total == 1
     with database.read_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
+
+
+def test_applications_query_includes_crm_and_score_context(database: Database) -> None:
+    profile, jobs = _seed_logical_vacancy(database)
+    ApplicationService(database).shortlist_job(
+        profile.id, jobs[0].id, priority="high", note="Dashboard follow-up"
+    )
+
+    rows = DashboardQueryService(database).applications(profile.id)
+
+    assert len(rows) == 1
+    assert rows[0]["current_status"] == "shortlisted"
+    assert rows[0]["priority"] == "high"
+    assert rows[0]["rank_score"] is not None
+    assert rows[0]["fit_score"] is not None
+    assert rows[0]["notes_preview"] == "Dashboard follow-up"

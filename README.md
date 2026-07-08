@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0–9 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application-status transitions, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, an optional local Streamlit dashboard, and dry-run-first legacy local-file import.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0-11 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application tracking, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, an optional local Streamlit dashboard, dry-run-first legacy local-file import, safe one-command pipeline orchestration, and a local Application Tracking CRM.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -13,7 +13,7 @@ Implemented:
 - Common job, description, candidate, analysis, application, run, notification, and FlowCV-artifact models.
 - SQLite with foreign keys, WAL mode, busy timeout, ordered migrations, and transaction rollback.
 - Versioned candidate profiles and source/source-job-ID uniqueness.
-- Application states and immutable transition history.
+- Application Tracking CRM with priority, notes, follow-up dates, CV artifact links, and immutable transition history.
 - Fixture-only tests with no external calls.
 - Arbeitsagentur v6 search and v4 detail parsing behind a source-independent contract.
 - Bounded pagination, retries/backoff, source-ID deduplication, description versioning, and collection-run metrics.
@@ -34,8 +34,9 @@ Implemented:
 - Optional local dashboard for source-neutral review, lifecycle tracking, duplicate decisions, CV preparation, notification history, and safe diagnostics.
 - Additive legacy import audit tables, verified SQLite backup gate, local CSV/JSON/TXT importers, fixture-only MySQL reader boundary, and conservative notification-history mapping.
 - Safe one-command local pipeline orchestration for collection, deduplication, analysis, ranking, notification preview, top-job display, and JSON summaries.
+- Local application tracking commands and dashboard workflow for shortlisted, CV-ready, applied, interview, offer, rejected, withdrawn, and skipped jobs.
 
-Not implemented yet: scheduling, application submission, PDF/DOCX, cover letters, OpenAI integration, real MySQL import, or destructive legacy cleanup.
+Not implemented yet: scheduling, application submission/auto-apply, PDF/DOCX, cover letters, OpenAI integration, real MySQL import, or destructive legacy cleanup.
 
 ## Requirements
 
@@ -180,6 +181,20 @@ Without `--live-collect`, no external job-source request is made. See
 [the pipeline guide](docs/PIPELINE.md) for live collection, output files, and
 daily workflow examples.
 
+## Track applications locally
+
+The Application Tracking CRM is local and manual. It never submits an
+application or sends a live message:
+
+```powershell
+python -m app.cli applications shortlist --profile-id <profile-id> --job-id <job-id> --priority high --note "Top ranked match"
+python -m app.cli applications list --profile-id <profile-id>
+python -m app.cli applications follow-up --profile-id <profile-id> --job-id <job-id> --date 2026-07-15
+```
+
+See [the application tracking guide](docs/APPLICATION_TRACKING.md) for statuses,
+dashboard workflow, CV artifact linking, and daily review commands.
+
 ## Preview Telegram top matches
 
 Preview is safe and offline:
@@ -228,7 +243,7 @@ required for tests. See [the legacy import guide](docs/LEGACY_IMPORT.md).
 
 ## Application lifecycle
 
-Supported states are `new`, `shortlisted`, `cv_ready`, `applied`, `skipped`, `rejected`, and `interview`. Every accepted change appends an immutable event. Direct `new → applied` is rejected, and creating a CV artifact does not change an application’s state.
+Supported states are `new`, `shortlisted`, `skipped`, `cv_ready`, `applied`, `interview`, `offer`, `rejected`, and `withdrawn`. Every accepted change appends an immutable event. Direct low-level `new -> applied` transitions remain rejected; CRM commands advance through required intermediate states when the user explicitly requests a later status.
 
 ## Security
 

@@ -11,7 +11,7 @@ from uuid import UUID
 
 from app.config import Settings
 from app.db.connection import Database
-from app.db.repositories import CandidateProfileRepository, JobRepository
+from app.db.repositories import ApplicationRepository, CandidateProfileRepository, JobRepository
 from app.domain.analysis import AnalysisAuthority
 from app.domain.enums import JobSource
 from app.services.analysis_rules import AnalysisRules
@@ -85,7 +85,7 @@ class PipelineService:
         analysis_summary = self._analysis_summary(request.profile_id)
         ranking_summary = self._ranking_summary(ranked)
         preview_summary = self._notification_preview(request, ranked)
-        top_jobs = self._top_jobs(ranked, request.top_n)
+        top_jobs = self._top_jobs(ranked, request.top_n, request.profile_id)
 
         summary: dict[str, object] = {
             "profile_id": str(request.profile_id),
@@ -250,8 +250,10 @@ class PipelineService:
             "prefilter_only": counts[AnalysisAuthority.PREFILTER_ONLY.value],
         }
 
-    @staticmethod
-    def _top_jobs(ranked: list[RankedVacancy], top_n: int) -> list[dict[str, object]]:
+    def _top_jobs(
+        self, ranked: list[RankedVacancy], top_n: int, profile_id: UUID | str
+    ) -> list[dict[str, object]]:
+        tracked = self._application_statuses(profile_id)
         rows = []
         for position, item in enumerate(ranked[:top_n], 1):
             job = item.job
@@ -268,8 +270,24 @@ class PipelineService:
                 "rank_score": item.ranking.rank_score,
                 "fit_score": item.fit_score,
                 "authority": item.ranking.authority.value,
+                "application_status": (
+                    tracked.get(str(item.ranking.cluster_id))
+                    or tracked.get(str(job.id))
+                ),
             })
         return rows
+
+    def _application_statuses(self, profile_id: UUID | str) -> dict[str, str]:
+        with self.database.read_connection() as connection:
+            applications = ApplicationRepository(connection).list(
+                profile_id=profile_id
+            )
+        statuses: dict[str, str] = {}
+        for application in applications:
+            statuses[str(application.job_id)] = application.status.value
+            if application.logical_cluster_id:
+                statuses[str(application.logical_cluster_id)] = application.status.value
+        return statuses
 
     @staticmethod
     def _description_counts(source_result) -> dict[str, int]:
@@ -285,6 +303,12 @@ class PipelineService:
         if request.dashboard_hint:
             actions.append("Open dashboard with: python -m app.dashboard")
         if top_jobs:
+            first = top_jobs[0]
+            actions.append(
+                "Shortlist top match with: python -m app.cli applications shortlist "
+                f"--profile-id {request.profile_id} --job-id {first['job_id']} "
+                "--priority high --note \"Top ranked match\""
+            )
             actions.append(
                 "Generate CV with: python -m app.cli cv generate "
                 "--job-id <JOB_ID> --profile-id <PROFILE_ID> --force-regenerate"

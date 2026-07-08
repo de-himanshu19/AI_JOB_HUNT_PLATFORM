@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import date
 
 import pytest
 
+import app.cli as cli
 from app.db.connection import Database
 from app.db.repositories import (
     ApplicationRepository,
@@ -184,3 +187,171 @@ def test_cv_artifact_creation_does_not_change_application_status(
     with database.read_connection() as connection:
         stored = ApplicationRepository(connection).get(application.id)
         assert stored.status is ApplicationStatus.SHORTLISTED
+
+
+def test_shortlist_is_idempotent_and_persists_crm_metadata(
+    database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    service = ApplicationService(database)
+
+    first = service.shortlist_job(
+        profile.id, job.id, priority="high", note="Top ranked match"
+    )
+    second = service.shortlist_job(
+        profile.id, job.id, priority="high", note="Top ranked match"
+    )
+    listed = service.list_applications(profile.id, ApplicationStatus.SHORTLISTED)
+
+    assert second.id == first.id
+    assert len(listed) == 1
+    assert listed[0].priority.value == "high"
+    assert "Top ranked match" in listed[0].notes
+    assert listed[0].status is ApplicationStatus.SHORTLISTED
+
+
+def test_application_tracking_resolves_logical_cluster(
+    database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    cluster_id = "11111111-1111-4111-8111-111111111111"
+    with database.transaction() as connection:
+        connection.execute(
+            """INSERT INTO duplicate_clusters
+            (id, representative_job_id, algorithm_version, created_at, updated_at)
+            VALUES (?, ?, 'm4-dedup-v1', '2026-07-09', '2026-07-09')""",
+            (cluster_id, str(job.id)),
+        )
+        connection.execute(
+            """INSERT INTO job_duplicate_links
+            (id, job_id, cluster_id, algorithm_version, match_method, confidence,
+             reasons_json, reviewed, created_at)
+            VALUES ('link-1', ?, ?, 'm4-dedup-v1', 'singleton', 1,
+                    '[]', 0, '2026-07-09')""",
+            (str(job.id), cluster_id),
+        )
+
+    application = ApplicationService(database).shortlist_job(profile.id, job.id)
+
+    assert str(application.logical_cluster_id) == cluster_id
+
+
+def test_due_followups_and_cv_ready_attachment(
+    database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    artifact_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    with database.transaction() as connection:
+        connection.execute(
+            """INSERT INTO cv_generation_artifacts (
+                id, job_id, logical_cluster_id, description_id,
+                description_content_hash, description_completeness, profile_id,
+                profile_version, profile_content_hash, analysis_id,
+                analyzer_version, rules_version, generator_version,
+                formatter_version, generation_mode, generation_identity,
+                artifact_format, source, parent_rule_based_artifact_id,
+                artifact_path, evidence_report_path, content_hash,
+                evidence_report_hash, provider, model, prompt_version,
+                ai_generated_at, validated, validation_result_json, created_at
+            ) VALUES (
+                ?, NULL, NULL, NULL, ?, 'full', ?, 1, ?, NULL,
+                'analyzer', 'rules', 'generator', 'formatter',
+                'manual_jd', ?, 'flowcv_txt', 'rule_based',
+                NULL, 'cv.txt', 'evidence.json', ?, ?, NULL, NULL, NULL,
+                NULL, 1, '{}', '2026-07-09'
+            )""",
+            (
+                artifact_id, "d" * 64, str(profile.id), "p" * 64,
+                "g" * 64, "c" * 64, "e" * 64,
+            ),
+        )
+    service = ApplicationService(database)
+    ready = service.mark_cv_ready(
+        profile.id, job.id, cv_artifact_id=artifact_id, note="FlowCV exported"
+    )
+    service.set_follow_up(
+        profile_id=profile.id,
+        job_id=job.id,
+        follow_up_date=date(2026, 7, 15),
+        note="Follow up after one week",
+    )
+
+    due = service.list_due_followups(profile.id, "2026-07-15")
+
+    assert ready.status is ApplicationStatus.CV_READY
+    assert str(ready.cv_artifact_id) == artifact_id
+    assert due[0].id == ready.id
+    assert due[0].follow_up_date == date(2026, 7, 15)
+
+
+def test_invalid_priority_date_and_missing_cv_fail_clearly(
+    database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    service = ApplicationService(database)
+
+    with pytest.raises(ValueError, match="urgent"):
+        service.shortlist_job(profile.id, job.id, priority="urgent")
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        service.set_follow_up(
+            profile_id=profile.id, job_id=job.id, follow_up_date="07/15/2026"
+        )
+    with pytest.raises(KeyError, match="CV artifact not found"):
+        service.mark_cv_ready(profile.id, job.id, cv_artifact_id="missing")
+
+
+def test_applications_cli_shortlist_list_due_and_history(
+    monkeypatch, settings, database: Database, master_cv_data: dict, capsys
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+    assert cli.main([
+        "applications", "shortlist",
+        "--profile-id", str(profile.id),
+        "--job-id", str(job.id),
+        "--priority", "high",
+        "--note", "CLI top match",
+    ]) == 0
+    shortlist_output = json.loads(capsys.readouterr().out)
+    assert shortlist_output["current_status"] == "shortlisted"
+    assert shortlist_output["priority"] == "high"
+
+    assert cli.main([
+        "applications", "follow-up",
+        "--profile-id", str(profile.id),
+        "--job-id", str(job.id),
+        "--date", "2026-07-15",
+    ]) == 0
+    capsys.readouterr()
+    assert cli.main([
+        "applications", "due",
+        "--profile-id", str(profile.id),
+        "--date", "2026-07-15",
+    ]) == 0
+    due_output = json.loads(capsys.readouterr().out)
+    assert due_output[0]["id"] == shortlist_output["id"]
+
+    assert cli.main([
+        "applications", "history",
+        "--profile-id", str(profile.id),
+        "--job-id", str(job.id),
+    ]) == 0
+    history = json.loads(capsys.readouterr().out)
+    assert history[0]["event_type"] == "created"
+    assert history[-1]["new_status"] == "shortlisted"
+
+
+def test_applications_cli_invalid_date_fails_clearly(
+    monkeypatch, settings, database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        cli.main([
+            "applications", "follow-up",
+            "--profile-id", str(profile.id),
+            "--job-id", str(job.id),
+            "--date", "15-07-2026",
+        ])

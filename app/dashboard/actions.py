@@ -34,17 +34,8 @@ class DashboardActions:
 
     def start_tracking(self, job_id: UUID | str, profile_id: UUID | str):
         job_key, profile_key = str(job_id), str(profile_id)
-        with self.database.read_connection() as connection:
-            row = connection.execute(
-                "SELECT id FROM applications WHERE job_id = ? AND profile_id = ?",
-                (job_key, profile_key),
-            ).fetchone()
-            if row:
-                return ApplicationRepository(connection).get(row["id"]), True
         try:
-            return ApplicationService(self.database).create(
-                UUID(job_key), UUID(profile_key)
-            ), False
+            return ApplicationService(self.database).track_job(profile_key, job_key)
         except sqlite3.IntegrityError:
             with self.database.read_connection() as connection:
                 row = connection.execute(
@@ -69,6 +60,49 @@ class DashboardActions:
     ):
         return ApplicationService(self.database).transition(
             UUID(str(application_id)), ApplicationStatus(status), reason=reason
+        )
+
+    def shortlist_application(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        priority: str | None = None,
+        note: str | None = None,
+    ):
+        return ApplicationService(self.database).shortlist_job(
+            profile_id, job_id, priority=priority, note=note
+        )
+
+    def set_application_status(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        status: str,
+        *,
+        note: str | None = None,
+    ):
+        return ApplicationService(self.database).set_status(
+            profile_id=profile_id, job_id=job_id, status=status, note=note
+        )
+
+    def set_application_follow_up(
+        self,
+        application_id: UUID | str,
+        follow_up_date: str,
+        *,
+        note: str | None = None,
+    ):
+        return ApplicationService(self.database).set_follow_up(
+            application_id=application_id,
+            follow_up_date=follow_up_date,
+            note=note,
+        )
+
+    def add_application_note(self, application_id: UUID | str, note: str):
+        return ApplicationService(self.database).add_note(
+            application_id=application_id,
+            note=note,
         )
 
     def review_duplicate(
