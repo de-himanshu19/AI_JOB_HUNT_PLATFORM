@@ -11,6 +11,7 @@ from app.db.repositories import CandidateProfileRepository, JobDescriptionReposi
 from app.domain.enums import DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
 from app.services.analysis_rules import AnalysisRules
+import app.services.cv_generation as cv_generation
 from app.services.cv_generation import CVGenerationService
 from app.services.deduplication import DeduplicationService
 from app.db.repositories import CVGenerationArtifactRepository
@@ -132,6 +133,32 @@ def test_changed_description_and_profile_create_new_artifacts_without_overwrite(
     assert profile_changed.id not in {original.id, changed.id}
     assert profile_changed.profile_version == 2
     assert service.artifact_details(original.id)[0] == original
+
+
+def test_builder_content_version_changes_rule_based_artifact_identity(
+    tmp_path, monkeypatch,
+) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    job = _job(database)
+    service = CVGenerationService(database, settings, rules)
+    original = service.generate_for_job(job.id, profile.id).rule_based_artifact
+
+    monkeypatch.setattr(
+        cv_generation,
+        "CV_BUILDER_CONTENT_VERSION",
+        "test-builder-content-next",
+    )
+    changed = service.generate_for_job(job.id, profile.id)
+
+    assert not changed.cache_hit
+    assert changed.rule_based_artifact.id != original.id
+    assert changed.rule_based_artifact.generation_identity != original.generation_identity
+    assert original.artifact_path.is_file()
+    assert service.artifact_details(original.id)[0] == original
+    assert (
+        "builder_content_version: test-builder-content-next"
+        in changed.rule_based_artifact.evidence_report_path.read_text(encoding="utf-8")
+    )
 
 
 def test_snippet_and_missing_stored_descriptions_require_manual_fallback(tmp_path) -> None:
@@ -303,11 +330,26 @@ def test_cv_cli_generate_list_show_and_manual_are_offline_and_do_not_change_stat
     artifact_id = generated["authoritative_rule_based_artifact"]["artifact_id"]
     assert generated["application_status_changed"] is False
     assert generated["ai_status"] == "not_requested"
+    assert generated["builder_content_version"] == cv_generation.CV_BUILDER_CONTENT_VERSION
 
     assert cli.main(["cv", "list", "--job-id", str(job.id)]) == 0
     assert json.loads(capsys.readouterr().out)[0]["artifact_id"] == artifact_id
     assert cli.main(["cv", "show", artifact_id]) == 0
     assert json.loads(capsys.readouterr().out)["artifact_id"] == artifact_id
+
+    assert cli.main([
+        "cv", "generate", "--job-id", str(job.id),
+        "--profile-id", str(profile.id), "--force-regenerate",
+    ]) == 0
+    forced = json.loads(capsys.readouterr().out)
+    forced_artifact_id = forced["authoritative_rule_based_artifact"]["artifact_id"]
+    assert forced["cached_artifact_reused"] is False
+    assert forced["force_regenerate_requested"] is True
+    assert forced_artifact_id != artifact_id
+    with database.read_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM cv_generation_artifacts WHERE source = 'rule_based'"
+        ).fetchone()[0] == 2
 
     manual = tmp_path / "manual.txt"
     manual.write_text("Data Analyst requires SQL and Python", encoding="utf-8")

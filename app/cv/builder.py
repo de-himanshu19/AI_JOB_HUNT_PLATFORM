@@ -14,6 +14,7 @@ from app.domain.candidate import CandidateProfile
 
 GENERATOR_VERSION = "m7-generator-v1"
 FORMATTER_VERSION = "flowcv-text-v2"
+CV_BUILDER_CONTENT_VERSION = "flowcv-content-v4"
 
 SUMMARY_WIDTH = 96
 SUMMARY_MAX_LINES = 5
@@ -23,7 +24,7 @@ MAX_EXPERIENCE_BULLETS = 3
 MAX_PROJECTS = 2
 MAX_PROJECT_BULLETS = 3
 MAX_CERTIFICATIONS = 5
-MAX_CERTIFICATION_BULLETS = 1
+MAX_CERTIFICATION_BULLETS = 0
 MAX_EDUCATION_ITEMS = 2
 MAX_EDUCATION_BULLETS = 1
 
@@ -44,6 +45,10 @@ SKILL_CANONICAL = {
     "excel": "Excel",
     "github": "GitHub",
     "git": "GitHub",
+    "kyc": "KYC/AML compliance",
+    "aml": "KYC/AML compliance",
+    "kyc / aml": "KYC/AML compliance",
+    "kyc and aml": "KYC/AML compliance",
     "kpi": "KPI reporting",
     "kpi reporting": "KPI reporting",
     "mysql": "MySQL",
@@ -59,16 +64,24 @@ SKILL_CANONICAL = {
     "sql": "SQL",
     "sqlalchemy": "SQLAlchemy",
     "sqlite": "SQLite",
+    "streamlit": "Streamlit",
     "stakeholder coordination": "stakeholder coordination",
     "tableau": "Tableau",
     "validation": "validation",
 }
 SKILL_GROUPS = (
-    ("Data Analysis", ("sql", "excel", "python", "pandas", "clean", "validation", "reconciliation", "analysis", "data quality"), 8),
-    ("BI & Reporting", ("power bi", "tableau", "kpi", "dashboard", "visualization", "reporting", "scorecard"), 7),
-    ("Databases & ETL", ("mysql", "sqlite", "sqlalchemy", "api", "etl", "database", "pipeline"), 7),
-    ("Business/Domain", ("bank", "compliance", "stakeholder", "coordination", "operation", "reporting", "aml", "kyc"), 7),
-    ("Tools", ("sap", "salesforce", "servicenow", "github", "git", "office"), 7),
+    ("Data Analysis", ("sql", "excel", "python", "pandas", "clean", "validation", "reconciliation", "analysis", "data quality"), 7),
+    ("BI & Reporting", ("power bi", "tableau", "kpi", "dashboard", "visualization", "reporting", "scorecard"), 5),
+    ("Databases & ETL", ("mysql", "sqlite", "sqlalchemy", "api", "etl", "database", "pipeline"), 5),
+    ("Business/Domain", ("bank", "compliance", "stakeholder", "coordination", "operation", "aml", "kyc"), 5),
+    ("Tools", ("sap", "salesforce", "servicenow", "github", "git", "office", "streamlit"), 6),
+)
+PREFERRED_COURSES = (
+    ("data analytics program", "Data Analytics Program - WBS Coding School, Germany, 03/2026-06/2026"),
+    ("sql for data analysis", "SQL for Data Analysis"),
+    ("complete guide to power bi for data analysts", "Complete Guide to Power BI for Data Analysts"),
+    ("python statistics essential training", "Python Statistics Essential Training"),
+    ("advanced sql", "Advanced SQL"),
 )
 MONTHS = {
     "jan": 1, "january": 1,
@@ -115,6 +128,12 @@ def _fix_missing_spaces(text: str) -> str:
     replacements = (
         (r"\bData(?=Analysis\b)", "Data "),
         (r"\bSLA(?=Breach\b)", "SLA "),
+        (r"\bStrategic(?=Decision\b)", "Strategic "),
+        (r"\bDecision(?=Making\b)", "Decision "),
+        (r"\bdata(?=storytelling\b)", "data "),
+        (r"\bcross(?=functional\b)", "cross "),
+        (r"\bsocial(?=media\b)", "social "),
+        (r"\bdigital(?=transformation\b)", "digital "),
         (r"\bfor(?=Data\b)", "for "),
         (r"\bMBA(?=in\b)", "MBA "),
         (r"Technology(?=GmbH\b)", "Technology "),
@@ -168,6 +187,8 @@ def _language_like(value: str) -> bool:
 
 def _canonical_skill(value: str) -> str:
     lowered = value.casefold().strip()
+    if "streamlit" in lowered:
+        return "Streamlit"
     if lowered in SKILL_CANONICAL:
         return SKILL_CANONICAL[lowered]
     for key, canonical in SKILL_CANONICAL.items():
@@ -323,11 +344,9 @@ class CVBuilder:
             *_items(data, "certifications"), *_items(data, "courses"),
             *_items(data, "training_and_courses"),
         ]
-        self._add_items(
-            lines, "CERTIFICATIONS AND COURSES", courses, context_terms, used_bullets,
-            max_items=MAX_CERTIFICATIONS, max_bullets=MAX_CERTIFICATION_BULLETS,
-            label_fields=("name", "title", "certificate"),
-        )
+        course_labels = self._course_labels(courses)
+        if course_labels:
+            lines.extend(["", "CERTIFICATIONS AND COURSES", *course_labels])
         self._add_items(
             lines, "EDUCATION", _items(data, "education"), context_terms, used_bullets,
             max_items=MAX_EDUCATION_ITEMS, max_bullets=MAX_EDUCATION_BULLETS,
@@ -407,6 +426,8 @@ class CVBuilder:
             matches = []
             for skill in unused:
                 lowered = skill.casefold()
+                if skill == "Streamlit" and group_name != "Tools":
+                    continue
                 if skill not in used and any(keyword in lowered for keyword in keywords):
                     matches.append(skill)
                     used.add(skill)
@@ -437,6 +458,25 @@ class CVBuilder:
         return _unique(value for value in values if not _language_like(value))
 
     @staticmethod
+    def _course_labels(items: list[dict[str, Any]]) -> list[str]:
+        selected: list[str] = []
+        used: set[str] = set()
+        for preferred_key, label in PREFERRED_COURSES:
+            for item in items:
+                haystack = " ".join(_strings(item)).casefold()
+                if preferred_key in haystack and preferred_key not in used:
+                    selected.append(label)
+                    used.add(preferred_key)
+                    break
+        if selected:
+            return selected[:MAX_CERTIFICATIONS]
+        return _unique(
+            _field(item, "name", "title", "certificate", "course_name", "certification_name")
+            or "Stored evidence"
+            for item in items[:MAX_CERTIFICATIONS]
+        )
+
+    @staticmethod
     def _add_items(
         lines, heading, items, context_terms, used_bullets, *,
         max_items, max_bullets, label_fields,
@@ -463,6 +503,8 @@ class CVBuilder:
             lines.append(header)
             if location and location not in header:
                 lines.append(location)
+            if max_bullets <= 0:
+                continue
             details = CVBuilder._rank_texts(_item_details(item), context_terms)
             selected = []
             for detail in details:
@@ -605,9 +647,23 @@ class CVBuilder:
         personal: dict[str, Any],
     ) -> list[str]:
         values = _strings(data.get("additional_information", []))
+        preferences = data.get("preferences", {})
+        if isinstance(preferences, dict):
+            values.extend(_strings(preferences.get("preferred_locations", [])))
+            values.extend(_strings(preferences.get("mobility", [])))
         for key in ("work_authorization", "availability"):
             values.extend(_strings(personal.get(key)))
-        return CVBuilder._unique_semantic(values)
+        text = " ".join(values).casefold()
+        result: list[str] = []
+        if any(term in text for term in ("blue card", "authorized to work", "authorised to work", "work authorization", "work authorisation", "visa")):
+            result.append("Authorized to work in Germany under an EU Blue Card")
+        if any(term in text for term in ("available immediately", "immediate availability", "availability", "immediate")):
+            result.append("Available immediately")
+        if "relocation" in text or "berlin" in text:
+            result.append("Open to relocation within Germany, especially Berlin")
+        if any(term in text for term in ("hybrid", "travel", "business travel")):
+            result.append("Open to hybrid work and occasional business travel")
+        return result[:4] if result else CVBuilder._unique_semantic(values)[:3]
 
     @staticmethod
     def _unique_semantic(values: Iterable[str]) -> list[str]:

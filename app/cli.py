@@ -21,7 +21,7 @@ from app.domain.enums import JobSource
 from app.domain.legacy_import import LegacyArtifactKind, LegacyImportPlan, LegacySourceType
 from app.logging_config import configure_logging
 from app.services.collection import CollectionService
-from app.services.cv_generation import CVGenerationService
+from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION, CVGenerationService
 from app.services.analysis_rules import AnalysisRules
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
@@ -175,11 +175,13 @@ def build_parser() -> argparse.ArgumentParser:
     cv_generate.add_argument("--profile-id", required=True)
     cv_generate.add_argument("--ai-polish", action="store_true")
     cv_generate.add_argument("--live-ai", action="store_true")
+    cv_generate.add_argument("--force-regenerate", action="store_true")
     cv_manual = cv_commands.add_parser("generate-manual")
     cv_manual.add_argument("--description-file", type=Path, required=True)
     cv_manual.add_argument("--profile-id", required=True)
     cv_manual.add_argument("--ai-polish", action="store_true")
     cv_manual.add_argument("--live-ai", action="store_true")
+    cv_manual.add_argument("--force-regenerate", action="store_true")
     cv_list = cv_commands.add_parser("list")
     cv_list.add_argument("--job-id")
     cv_show = cv_commands.add_parser("show")
@@ -754,11 +756,13 @@ def _cv(args: argparse.Namespace) -> int:
         result = service.generate_for_job(
             args.job_id, args.profile_id,
             ai_polish=wants_ai, live_ai=live_ai,
+            force_regenerate=args.force_regenerate,
         )
     elif args.cv_command == "generate-manual":
         result = service.generate_manual_file(
             args.description_file, args.profile_id,
             ai_polish=wants_ai, live_ai=live_ai,
+            force_regenerate=args.force_regenerate,
         )
     elif args.cv_command == "list":
         artifacts = service.list_artifacts(args.job_id)
@@ -782,6 +786,8 @@ def _cv(args: argparse.Namespace) -> int:
             result.rule_based_artifact
         ),
         "cached_artifact_reused": result.cache_hit,
+        "force_regenerate_requested": bool(getattr(args, "force_regenerate", False)),
+        "builder_content_version": CV_BUILDER_CONTENT_VERSION,
         "ai_polish_requested": wants_ai,
         "ai_status": result.ai_status,
         "ai_failure_category": result.ai_failure_category,

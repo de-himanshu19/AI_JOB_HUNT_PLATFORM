@@ -15,7 +15,12 @@ from uuid import UUID, uuid4
 import requests
 
 from app.config import Settings
-from app.cv.builder import FORMATTER_VERSION, GENERATOR_VERSION, CVBuilder
+from app.cv.builder import (
+    CV_BUILDER_CONTENT_VERSION,
+    FORMATTER_VERSION,
+    GENERATOR_VERSION,
+    CVBuilder,
+)
 from app.cv.storage import ArtifactStore
 from app.cv.validation import CVValidator
 from app.db.connection import Database
@@ -88,6 +93,7 @@ class CVGenerationService:
         *,
         ai_polish: bool = False,
         live_ai: bool = False,
+        force_regenerate: bool = False,
     ) -> CVGenerationResult:
         self._validate_ai_flags(ai_polish, live_ai)
         with self.database.read_connection() as connection:
@@ -137,6 +143,7 @@ class CVGenerationService:
             "rules_version": analysis.rules_version,
             "generator_version": GENERATOR_VERSION,
             "formatter_version": FORMATTER_VERSION,
+            "builder_content_version": CV_BUILDER_CONTENT_VERSION,
         }
         build = self.builder.build(
             profile, tuple(analysis.requirements), tuple(analysis.evidence),
@@ -150,6 +157,7 @@ class CVGenerationService:
             description_id=str(description.id), profile=profile,
             analysis_id=str(analysis.id), analyzer_version=analysis.analyzer_version,
             rules_version=analysis.rules_version,
+            force_regeneration_id=str(uuid4()) if force_regenerate else None,
         )
         artifact, cache_hit = self._authoritative_artifact(
             build, identity=identity, profile=profile,
@@ -170,6 +178,7 @@ class CVGenerationService:
         *,
         ai_polish: bool = False,
         live_ai: bool = False,
+        force_regenerate: bool = False,
     ) -> CVGenerationResult:
         resolved = path.expanduser().resolve(strict=False)
         if resolved.suffix.casefold() not in {".txt", ".md"}:
@@ -186,7 +195,8 @@ class CVGenerationService:
         except UnicodeDecodeError as error:
             raise ValueError("Manual JD must use UTF-8 text encoding") from error
         return self.generate_manual_text(
-            text, profile_id, ai_polish=ai_polish, live_ai=live_ai
+            text, profile_id, ai_polish=ai_polish, live_ai=live_ai,
+            force_regenerate=force_regenerate,
         )
 
     def generate_manual_text(
@@ -196,6 +206,7 @@ class CVGenerationService:
         *,
         ai_polish: bool = False,
         live_ai: bool = False,
+        force_regenerate: bool = False,
     ) -> CVGenerationResult:
         self._validate_ai_flags(ai_polish, live_ai)
         if not isinstance(text, str) or not text.strip():
@@ -229,6 +240,7 @@ class CVGenerationService:
             "rules_version": self.rules.rules_version,
             "generator_version": GENERATOR_VERSION,
             "formatter_version": FORMATTER_VERSION,
+            "builder_content_version": CV_BUILDER_CONTENT_VERSION,
         }
         build = self.builder.build(
             profile, requirements, evidence, missing_requirements=missing,
@@ -239,6 +251,7 @@ class CVGenerationService:
             description_id=None, profile=profile, analysis_id=None,
             analyzer_version=self.rules.analyzer_version,
             rules_version=self.rules.rules_version,
+            force_regeneration_id=str(uuid4()) if force_regenerate else None,
         )
         artifact, cache_hit = self._authoritative_artifact(
             build, identity=identity, profile=profile,
@@ -274,6 +287,7 @@ class CVGenerationService:
             "profile_version": profile.version, "profile_hash": profile.content_hash,
             "generator_version": GENERATOR_VERSION,
             "formatter_version": FORMATTER_VERSION,
+            "builder_content_version": CV_BUILDER_CONTENT_VERSION,
             "rules_configuration_hash": _stable_hash(self.rules.model_dump(mode="json")),
         })
 

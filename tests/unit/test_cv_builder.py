@@ -172,13 +172,35 @@ def _noisy_profile() -> CandidateProfile:
                 },
             ]
         },
-        "education": {"items": [{"degree": "MBAin International Management"}]},
+        "education": {
+            "items": [
+                {
+                    "degree": "MBAin International Management",
+                    "summary": "Focus on Strategic Decision\ufffeMaking.",
+                }
+            ]
+        },
+        "courses": {
+            "items": [
+                {
+                    "course_name": "Data Analytics Program",
+                    "provider": "WBS Coding School, Germany",
+                    "dates": "03/2026-06/2026",
+                    "description": "Long description that should not be emitted.",
+                },
+                {"certification_name": "SQL for Data Analysis"},
+                {"certification_name": "Complete Guide to Power BI for Data Analysts by Microsoft Press 2024"},
+                {"certification_name": "Python Statistics Essential Training"},
+                {"certification_name": "Advanced SQL for Query Tuning and Performance Optimization"},
+                {"certification_name": "Data Visualization for Data Analysts and Analytics"},
+            ]
+        },
         "skills_and_tools": {
             "data": ["SQL", "Excel", "Python", "Pandas", "data cleaning", "validation", "reconciliation"],
-            "bi": ["Power BI", "Tableau", "KPI reporting", "dashboards"],
+            "bi": ["Power BI", "Tableau", "KPI reporting", "dashboards", "data\ufffestorytelling"],
             "database": ["MySQL", "SQLite", "SQLAlchemy", "APIs", "ETL"],
-            "business": ["banking operations", "compliance", "stakeholder coordination"],
-            "tools": ["SAP", "Salesforce CRM", "ServiceNow", "GitHub"],
+            "business": ["banking operations", "compliance", "stakeholder coordination", "KYC", "AML", "KYC / AML", "Streamlit"],
+            "tools": ["SAP", "Salesforce CRM", "ServiceNow", "GitHub", "Streamlit"],
             "languages": ["German A2", "English fluent"],
         },
         "languages": [
@@ -191,7 +213,14 @@ def _noisy_profile() -> CandidateProfile:
                 "Authorized to work in Germany via EU Blue Card.",
                 "Available immediately.",
                 "Immediate availability.",
+                "Immediate",
+                "Open to relocation or hybrid work depending on role location.",
+                "Flexible for occasional short-term business travel.",
             ]
+        },
+        "preferences": {
+            "preferred_locations": ["Berlin"],
+            "mobility": ["hybrid"],
         },
     }
     return CandidateProfile.from_master_cv(payload, version=1, profile_key="noisy")
@@ -258,7 +287,7 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
         or unicodedata.category(char) not in {"Cc", "Cf", "Co", "Cs", "Cn"}
         for char in text
     )
-    assert len(text.splitlines()) <= 80
+    assert len(text.splitlines()) <= 70
     assert text.count("Prepared SQL validation reports for technical review.") == 1
     assert text.count("Giesecke+Devrient Currency Technology GmbH") == 1
     assert "Extra Project" not in text
@@ -267,6 +296,10 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
     assert "forData" not in text
     assert "MBAin" not in text
     assert "TechnologyGmbH" not in text
+    assert "Strategic DecisionMaking" not in text
+    assert "Strategic Decision Making" in text
+    assert "datastorytelling" not in text
+    assert "data\ufffestorytelling" not in text
     assert "Data Analysis" in text
     assert "SLA Breach" in text
     assert "for Data" in text
@@ -285,6 +318,11 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
     assert "Tools:" in skills
     assert "German" not in skills
     assert "A2" not in skills
+    business_line = next(line for line in skills.splitlines() if line.startswith("Business/Domain:"))
+    tools_line = next(line for line in skills.splitlines() if line.startswith("Tools:"))
+    assert "Streamlit" not in business_line
+    assert "Streamlit" in tools_line
+    assert skills.count("KYC/AML compliance") == 1
 
     languages = "\n".join(_section(text, "LANGUAGES"))
     assert "German: A2 and actively improving" in languages
@@ -302,8 +340,21 @@ def test_rule_builder_keeps_flowcv_output_concise_and_sections_clean() -> None:
     assert "Punjab National Bank | 07/2014 - 11/2021" in experience
 
     additional = "\n".join(_section(text, "ADDITIONAL INFORMATION"))
-    assert additional.count("authorized to work") == 1
-    assert additional.casefold().count("availability") + additional.casefold().count("available immediately") == 1
+    assert additional.casefold().count("authorized to work") == 1
+    assert additional.casefold().count("available immediately") == 1
+    assert "Immediate\n" not in additional
+    assert "Authorized to work in Germany under an EU Blue Card" in additional
+    assert "Open to relocation within Germany, especially Berlin" in additional
+    assert "Open to hybrid work and occasional business travel" in additional
+
+    courses = "\n".join(_section(text, "CERTIFICATIONS AND COURSES"))
+    assert "Data Analytics Program - WBS Coding School, Germany, 03/2026-06/2026" in courses
+    assert "SQL for Data Analysis" in courses
+    assert "Complete Guide to Power BI for Data Analysts" in courses
+    assert "Python Statistics Essential Training" in courses
+    assert "Advanced SQL" in courses
+    assert "Long description" not in courses
+    assert "Data Visualization for Data Analysts and Analytics" not in courses
 
 
 def test_rule_builder_limits_projects_to_job_relevant_short_blocks() -> None:

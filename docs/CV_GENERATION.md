@@ -9,6 +9,7 @@ network connection in normal operation.
 ```powershell
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
 python -m app.cli cv generate-manual --description-file <path> --profile-id <profile-id>
+python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id> --force-regenerate
 python -m app.cli cv list --job-id <job-id>
 python -m app.cli cv show <artifact-id>
 ```
@@ -41,13 +42,22 @@ removes broken Unicode/control characters before writing the artifact. Job-fit
 evidence still drives selection; unsupported skills or stronger language claims
 remain excluded by the validator.
 
+Certifications and courses are rendered as a compact Data Analyst-focused list:
+Data Analytics Program, SQL for Data Analysis, Complete Guide to Power BI for
+Data Analysts, Python Statistics Essential Training, and optional Advanced SQL.
+Additional information is normalized to concise work-authorization,
+availability, relocation, hybrid-work, and travel bullets so it does not spill
+onto a third page.
+
 ## Identity and storage
 
 The authoritative cache identity hashes generation mode, description row/hash,
-profile ID/version/hash, analysis ID, analyzer/rules identity, generator and
-formatter versions, and the complete fit-rule configuration hash. An identical
-request reuses the existing validated artifact after checking both file hashes
-and the configured artifact root.
+profile ID/version/hash, analysis ID, analyzer/rules identity, generator,
+formatter, builder-content versions, and the complete fit-rule configuration
+hash. An identical request reuses the existing validated artifact after checking
+both file hashes and the configured artifact root. `--force-regenerate` bypasses
+reuse by creating a fresh identity, preserving old artifacts and evidence
+reports.
 
 `cv_generation_artifacts` is the canonical Milestone 7 table. It is additive so
 the original `cv_artifacts` rows remain readable. UUID-only filenames are written
