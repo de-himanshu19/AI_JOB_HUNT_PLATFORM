@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -100,6 +101,9 @@ class CVValidator:
         errors = [f"missing section: {section}" for section in REQUIRED_SECTIONS if section not in headings]
         lowered = text.casefold()
         errors.extend(f"internal label exposed: {label}" for label in INTERNAL_LABELS if label in lowered)
+        unsafe = CVValidator._unsafe_characters(text)
+        if unsafe:
+            errors.append("broken or private-use characters detected")
         return errors
 
     @staticmethod
@@ -113,3 +117,14 @@ class CVValidator:
             text,
         ))
         return {phrase for phrase in phrases if not phrase.isupper()}
+
+    @staticmethod
+    def _unsafe_characters(text: str) -> set[str]:
+        allowed_controls = {"\n", "\r", "\t"}
+        return {
+            character for character in text
+            if (
+                unicodedata.category(character) in {"Cc", "Cn", "Co", "Cs"}
+                and character not in allowed_controls
+            )
+        }

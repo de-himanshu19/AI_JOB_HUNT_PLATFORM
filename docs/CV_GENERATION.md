@@ -15,6 +15,7 @@ python -m app.cli cv list --job-id <job-id>
 python -m app.cli cv show --artifact-id <artifact-id>
 python -m app.cli cv show --artifact-id <artifact-id> --text
 python -m app.cli cv show --artifact-id <artifact-id> --evidence
+python -m app.cli cv polish --artifact-id <rule-based-artifact-id> --live-ai
 ```
 
 Stored-job generation accepts only the latest `full` description. Snippet and
@@ -72,12 +73,41 @@ filename. Failed database persistence removes newly written files.
 
 ## Optional AI derivative
 
-AI polishing requires both `--ai-polish` and `--live-ai`, plus
-`AI_PROVIDER=local_ollama` or `ollama_cloud`. OpenAI is not supported. Successful
-output is validated and stored as a separate child artifact. Timeout, provider,
-malformed-content, incomplete-section, protected-fact, unsupported-number/tool,
-or stronger-wording failures create a safe `cv_ai_attempts` failure record and
-leave the rule-based artifact unchanged.
+Milestone 13 supports an explicitly enabled OpenAI-compatible chat-completions
+API provider. Rule-based generation remains the default and needs no AI
+credentials. API polish requires all of:
 
-Prompts, CV/JD text, response bodies, credentials, and token-bearing URLs are
-never logged. Automated tests inject fake providers and make no live request.
+```text
+AI_ENABLED=true
+AI_PROVIDER=openai_compatible
+AI_API_KEY=
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=<model name>
+AI_TIMEOUT_SECONDS=30
+AI_MAX_RETRIES=2
+```
+
+Generation-time polish requires both `--ai-polish` and `--live-ai`:
+
+```powershell
+python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id> --force-regenerate --ai-polish --live-ai
+```
+
+Existing rule-based artifacts can be polished separately:
+
+```powershell
+python -m app.cli cv polish --artifact-id <rule-based-artifact-id> --live-ai
+```
+
+The request sends CV text and protected-fact instructions to the configured
+external API. Never commit real API keys. Prompts, CV/JD text, response bodies,
+credentials, and token-bearing URLs are never logged.
+
+Successful output is validated and stored as a separate child artifact with
+`parent_rule_based_artifact_id`, provider, model, prompt version, and validation
+metadata. Timeout, rate-limit, provider, malformed-response, safety, config,
+protected-fact, unsupported-number/tool, broken-character, or stronger-wording
+failures create a safe `cv_ai_attempts` failure record and leave the
+rule-based artifact unchanged.
+
+Automated tests inject fake providers and make no live AI request.

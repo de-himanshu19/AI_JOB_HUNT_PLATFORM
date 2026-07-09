@@ -14,7 +14,7 @@ from app.db.repositories import (
     JobRepository,
 )
 from app.domain.application import Application, ApplicationEvent, ApplicationPriority
-from app.domain.enums import ApplicationStatus
+from app.domain.enums import ApplicationStatus, ArtifactSource
 
 
 ALLOWED_TRANSITIONS: dict[ApplicationStatus, frozenset[ApplicationStatus]] = {
@@ -594,5 +594,13 @@ class ApplicationService:
 
     @staticmethod
     def _validate_cv_artifact(connection, cv_artifact_id) -> None:
-        if CVGenerationArtifactRepository(connection).get(cv_artifact_id) is None:
+        artifact = CVGenerationArtifactRepository(connection).get(cv_artifact_id)
+        if artifact is None:
             raise KeyError(f"CV artifact not found: {cv_artifact_id}")
+        if not artifact.validated:
+            raise ValueError("Only validated CV artifacts can be attached")
+        if (
+            artifact.source is ArtifactSource.AI_POLISHED
+            and artifact.parent_rule_based_artifact_id is None
+        ):
+            raise ValueError("AI CV artifacts require a rule-based parent")

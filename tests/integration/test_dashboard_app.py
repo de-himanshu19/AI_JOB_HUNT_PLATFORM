@@ -48,8 +48,9 @@ def _offline_environment(tmp_path: Path) -> dict[str, str]:
         "TELEGRAM_ENABLED": "false",
         "TELEGRAM_BOT_TOKEN": "",
         "TELEGRAM_CHAT_ID": "",
+        "AI_ENABLED": "false",
         "AI_PROVIDER": "rule_based",
-        "AI_OLLAMA_API_KEY": "",
+        "AI_API_KEY": "",
         "PYTHONUNBUFFERED": "1",
     })
     return environment
@@ -64,8 +65,9 @@ def _run(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_ENABLED", "false")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
+    monkeypatch.setenv("AI_ENABLED", "false")
     monkeypatch.setenv("AI_PROVIDER", "rule_based")
-    monkeypatch.setenv("AI_OLLAMA_API_KEY", "")
+    monkeypatch.setenv("AI_API_KEY", "")
     _reset_settings_cache_for_tests()
     app = AppTest.from_file(str(APP), default_timeout=20).run()
     return app

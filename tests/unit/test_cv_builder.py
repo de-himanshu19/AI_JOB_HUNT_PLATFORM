@@ -398,6 +398,9 @@ def test_ai_validator_rejects_changed_facts_numbers_tools_and_incomplete_output(
     assert any("Invented Corporation" in error for error in invented_result.errors)
     assert any("german fluent" in error for error in invented_result.errors)
     assert not validator.validate_ai("incomplete", build.cv_text, build.protected_facts).valid
+    broken = build.cv_text + "\ufffe\n"
+    broken_result = validator.validate_ai(broken, build.cv_text, build.protected_facts)
+    assert any("private-use" in error for error in broken_result.errors)
 
 
 def test_artifact_store_uses_uuid_names_atomic_files_and_never_overwrites(tmp_path) -> None:

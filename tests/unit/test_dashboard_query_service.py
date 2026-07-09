@@ -206,3 +206,89 @@ def test_cv_artifact_queries_read_text_and_handle_missing_files(
     missing = service.read_cv_artifact_text(artifact_id)
     assert missing["found"] is False
     assert "missing" in missing["message"]
+
+
+def test_cv_artifact_queries_include_ai_metadata(database: Database, tmp_path: Path) -> None:
+    profile, jobs = _seed_logical_vacancy(database)
+    with database.read_connection() as connection:
+        analyzed_job_id = connection.execute(
+            """SELECT job_id FROM job_analyses
+            WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(profile.id),),
+        ).fetchone()["job_id"]
+    job = next(item for item in jobs if str(item.id) == analyzed_job_id)
+    parent_id = "33333333-3333-4333-8333-333333333333"
+    ai_id = "44444444-4444-4444-8444-444444444444"
+    parent_path = tmp_path / "rule.txt"
+    ai_path = tmp_path / "ai.txt"
+    evidence_path = tmp_path / "evidence.txt"
+    parent_path.write_text("Rule CV", encoding="utf-8")
+    ai_path.write_text("AI CV", encoding="utf-8")
+    evidence_path.write_text("Evidence", encoding="utf-8")
+    with database.transaction() as connection:
+        description = connection.execute(
+            """SELECT id, content_hash FROM job_descriptions
+            WHERE job_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(job.id),),
+        ).fetchone()
+        analysis = connection.execute(
+            """SELECT id FROM job_analyses
+            WHERE job_id = ? AND profile_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(job.id), str(profile.id)),
+        ).fetchone()
+        for artifact_id, source, parent, path, provider, model, prompt in (
+            (parent_id, "rule_based", None, parent_path, None, None, None),
+            (
+                ai_id, "ai_polished", parent_id, ai_path,
+                "openai_compatible", "test-model", "m13-cv-polish-v1",
+            ),
+        ):
+            connection.execute(
+                """INSERT INTO cv_generation_artifacts (
+                    id, job_id, logical_cluster_id, description_id,
+                    description_content_hash, description_completeness, profile_id,
+                    profile_version, profile_content_hash, analysis_id,
+                    analyzer_version, rules_version, generator_version,
+                    formatter_version, generation_mode, generation_identity,
+                    artifact_format, source, parent_rule_based_artifact_id,
+                    artifact_path, evidence_report_path, content_hash,
+                    evidence_report_hash, provider, model, prompt_version,
+                    ai_generated_at, validated, validation_result_json, created_at
+                ) VALUES (
+                    ?, ?, NULL, ?, ?, 'full', ?, 1, ?, ?, 'analyzer', 'rules',
+                    'generator', 'formatter', 'stored_job', ?, 'flowcv_txt',
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    CASE WHEN ? IS NULL THEN NULL ELSE '2026-07-09T00:00:00+00:00' END,
+                    1, '{"valid": true}', '2026-07-09T00:00:00+00:00'
+                )""",
+                (
+                    artifact_id, str(job.id), description["id"],
+                    description["content_hash"], str(profile.id),
+                    profile.content_hash, analysis["id"],
+                    artifact_id.replace("-", "")[:64].ljust(64, "0"),
+                    source, parent, str(path), str(evidence_path),
+                    "c" * 64, "e" * 64, provider, model, prompt, provider,
+                ),
+            )
+        connection.execute(
+            """INSERT INTO cv_ai_attempts (
+                id, parent_rule_based_artifact_id, derivative_artifact_id,
+                provider, model, prompt_version, status, failure_category,
+                evidence_report_path, validation_result_json, generated_at
+            ) VALUES (
+                '55555555-5555-4555-8555-555555555555', ?, ?,
+                'openai_compatible', 'test-model', 'm13-cv-polish-v1',
+                'succeeded', NULL, ?, '{"valid": true}', '2026-07-09T00:00:00+00:00'
+            )""",
+            (parent_id, ai_id, str(evidence_path)),
+        )
+
+    artifacts = DashboardQueryService(database).list_cv_artifacts(profile.id)
+    ai = next(item for item in artifacts if item["artifact_id"] == ai_id)
+
+    assert ai["source"] == "ai_polished"
+    assert ai["parent_rule_based_artifact_id"] == parent_id
+    assert ai["provider"] == "openai_compatible"
+    assert ai["model"] == "test-model"
+    assert ai["prompt_version"] == "m13-cv-polish-v1"
+    assert ai["ai_status"] == "succeeded"

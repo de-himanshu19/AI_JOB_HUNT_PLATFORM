@@ -10,6 +10,8 @@ from app.db.migrations import migrate
 from app.db.repositories import CandidateProfileRepository, JobDescriptionRepository, JobRepository
 from app.domain.enums import DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
+from app.integrations.ai.base import AIRateLimitError
+from app.integrations.ai.openai_compatible import OpenAICompatibleProvider
 from app.services.analysis_rules import AnalysisRules
 import app.services.cv_generation as cv_generation
 from app.services.cv_generation import CVGenerationService
@@ -23,7 +25,7 @@ FIXTURES = ROOT / "tests/fixtures/fit_analysis"
 
 
 class FakeProvider:
-    name = "fake_ollama"
+    name = "fake_openai_compatible"
     model = "fake-model"
 
     def __init__(self, response: str):
@@ -33,6 +35,7 @@ class FakeProvider:
     def polish(self, prompt: str) -> str:
         self.calls += 1
         assert "Return only the complete CV text" in prompt
+        assert "PROTECTED FACTS" in prompt
         return self.response
 
 
@@ -267,8 +270,9 @@ def test_ai_timeout_and_provider_errors_are_safe_and_rule_file_survives(tmp_path
     job = _job(database)
     for error, category in (
         (requests.Timeout("slow"), "timeout"),
+        (AIRateLimitError("quota"), "rate_limited"),
         (RuntimeError("secret response must not escape"), "provider_error"),
-        (ValueError("invalid JSON"), "malformed_content"),
+        (ValueError("invalid JSON"), "malformed_response"),
     ):
         result = CVGenerationService(
             database, settings, rules, provider=FailingProvider(error)
@@ -280,9 +284,10 @@ def test_ai_timeout_and_provider_errors_are_safe_and_rule_file_survives(tmp_path
         result.rule_based_artifact.id
     )
     assert {attempt.failure_category for attempt in attempts} >= {
-        "timeout", "provider_error", "malformed_content",
+        "timeout", "rate_limited", "provider_error", "malformed_response",
     }
     assert all("secret response" not in json.dumps(attempt.validation_result) for attempt in attempts)
+    assert all(attempt.validation_result["network_requested"] for attempt in attempts)
     assert all(attempt.evidence_report_path.is_file() for attempt in attempts)
 
 
@@ -291,15 +296,14 @@ def test_ai_requires_both_explicit_flags_and_never_calls_provider_otherwise(tmp_
     job = _job(database)
     provider = FakeProvider("unused")
     service = CVGenerationService(database, settings, rules, provider=provider)
-    for flags in ((True, False), (False, True)):
-        try:
-            service.generate_for_job(
-                job.id, profile.id, ai_polish=flags[0], live_ai=flags[1]
-            )
-        except ValueError as error:
-            assert "both --ai-polish and --live-ai" in str(error)
-        else:
-            raise AssertionError("A single AI opt-in flag was accepted")
+    try:
+        service.generate_for_job(job.id, profile.id, ai_polish=True, live_ai=False)
+    except ValueError as error:
+        assert "both --ai-polish and --live-ai" in str(error)
+    else:
+        raise AssertionError("AI polish without live opt-in was accepted")
+    live_only = service.generate_for_job(job.id, profile.id, ai_polish=False, live_ai=True)
+    assert live_only.ai_status == "not_requested"
     assert provider.calls == 0
 
 
@@ -316,9 +320,48 @@ def test_unconfigured_ai_records_failure_after_authoritative_generation(tmp_path
         result.rule_based_artifact.id
     )
     assert attempts[0].provider == "unconfigured"
+    assert attempts[0].validation_result["network_requested"] is False
     assert "configuration_error" in attempts[0].evidence_report_path.read_text(
         encoding="utf-8"
     )
+
+
+def test_configured_api_provider_missing_key_records_configuration_failure(tmp_path) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    settings = settings.model_copy(update={
+        "ai_enabled": True,
+        "ai_provider": "openai_compatible",
+        "ai_api_key": None,
+    })
+    job = _job(database)
+    result = CVGenerationService(
+        database, settings, rules, provider=OpenAICompatibleProvider(settings)
+    ).generate_for_job(job.id, profile.id, ai_polish=True, live_ai=True)
+
+    assert result.ai_status == "failed"
+    assert result.ai_failure_category == "configuration_error"
+    assert result.ai_validation_result["network_requested"] is False
+    _, attempts = CVGenerationService(database, settings, rules).artifact_details(
+        result.rule_based_artifact.id
+    )
+    assert attempts[0].failure_category == "configuration_error"
+
+
+def test_configured_api_provider_requires_ai_enabled_without_network(tmp_path) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    settings = settings.model_copy(update={
+        "ai_enabled": False,
+        "ai_provider": "openai_compatible",
+        "ai_api_key": "fake-key",
+    })
+    job = _job(database)
+    result = CVGenerationService(
+        database, settings, rules, provider=OpenAICompatibleProvider(settings)
+    ).generate_for_job(job.id, profile.id, ai_polish=True, live_ai=True)
+
+    assert result.ai_status == "failed"
+    assert result.ai_failure_category == "safety_not_enabled"
+    assert result.ai_validation_result["network_requested"] is False
 
 
 def test_manual_file_rejects_empty_large_non_utf8_and_non_text_inputs(tmp_path) -> None:
@@ -405,3 +448,49 @@ def test_cv_cli_generate_list_show_and_manual_are_offline_and_do_not_change_stat
     assert manual_output["authoritative_rule_based_artifact"]["job_id"] is None
     with database.read_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0] == 0
+
+
+def test_cli_ai_polish_without_live_ai_returns_safety_json(
+    tmp_path, monkeypatch, capsys,
+) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    job = _job(database)
+    provider = FakeProvider("unused")
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr(cli, "build_ai_provider", lambda _settings: provider)
+
+    assert cli.main([
+        "cv", "generate", "--job-id", str(job.id),
+        "--profile-id", str(profile.id), "--ai-polish",
+    ]) == 1
+    output = json.loads(capsys.readouterr().out)
+
+    assert output["ai_status"] == "failed"
+    assert output["ai_failure_category"] == "safety_not_enabled"
+    assert output["validation_result"]["network_requested"] is False
+    assert provider.calls == 0
+
+
+def test_cli_polish_existing_rule_based_artifact_with_mocked_provider(
+    tmp_path, monkeypatch, capsys,
+) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    job = _job(database)
+    base = CVGenerationService(
+        database, settings, rules
+    ).generate_for_job(job.id, profile.id).rule_based_artifact
+    rule_text = base.artifact_path.read_text(encoding="utf-8")
+    provider = FakeProvider(rule_text)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr(cli, "build_ai_provider", lambda _settings: provider)
+
+    assert cli.main([
+        "cv", "polish", "--artifact-id", str(base.id), "--live-ai",
+    ]) == 0
+    output = json.loads(capsys.readouterr().out)
+
+    assert provider.calls == 1
+    assert output["ai_status"] == "succeeded"
+    assert output["ai_artifact"]["parent_rule_based_artifact_id"] == str(base.id)
+    assert output["ai_artifact"]["source"] == "ai_polished"
+    assert output["validation_result"]["network_requested"] is True

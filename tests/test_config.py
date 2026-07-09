@@ -34,6 +34,12 @@ def test_settings_defaults_and_approved_product_policy(tmp_path: Path) -> None:
     assert settings.telegram_top_n == 20
     assert settings.telegram_message_max_chars == 4000
     assert settings.telegram_max_retries == 3
+    assert settings.ai_enabled is False
+    assert settings.ai_provider == "rule_based"
+    assert settings.ai_base_url == "https://api.openai.com/v1"
+    assert settings.ai_model == "gpt-4.1-mini"
+    assert settings.ai_timeout_seconds == 30
+    assert settings.ai_max_retries == 2
     assert settings.legacy_mysql_enabled is False
     assert settings.legacy_mysql_host is None
     assert settings.legacy_mysql_port == 3306
@@ -101,10 +107,21 @@ def test_feature_specific_validation_is_deferred_until_enabled(tmp_path: Path) -
             {"TELEGRAM_ENABLED": "true"}, root=tmp_path
         )
 
-    with pytest.raises(ValidationError, match="AI_OLLAMA_API_KEY"):
-        config.settings_from_mapping(
-            {"AI_PROVIDER": "ollama_cloud"}, root=tmp_path
-        )
+    configured_ai = config.settings_from_mapping(
+        {
+            "AI_ENABLED": "true",
+            "AI_PROVIDER": "openai_compatible",
+            "AI_API_KEY": "test-key",
+            "AI_MODEL": "test-model",
+        },
+        root=tmp_path,
+    )
+    assert configured_ai.ai_enabled is True
+    assert configured_ai.ai_provider == "openai_compatible"
+    assert configured_ai.ai_api_key.get_secret_value() == "test-key"
+
+    with pytest.raises(ValidationError, match="AI_PROVIDER"):
+        config.settings_from_mapping({"AI_PROVIDER": "local_ollama"}, root=tmp_path)
 
     with pytest.raises(ValidationError, match="Legacy MySQL credentials"):
         config.settings_from_mapping(
@@ -117,7 +134,7 @@ def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
         {
             "TELEGRAM_BOT_TOKEN": "do-not-log",
             "TELEGRAM_CHAT_ID": "do-not-log",
-            "AI_OLLAMA_API_KEY": "do-not-log",
+            "AI_API_KEY": "do-not-log",
             "LEGACY_MYSQL_PASSWORD": "do-not-log",
         },
         root=tmp_path,
@@ -126,7 +143,7 @@ def test_secret_redaction_covers_required_name_markers(tmp_path: Path) -> None:
 
     assert redacted["telegram_bot_token"] == "***REDACTED***"
     assert redacted["telegram_chat_id"] == "***REDACTED***"
-    assert redacted["ai_ollama_api_key"] == "***REDACTED***"
+    assert redacted["ai_api_key"] == "***REDACTED***"
     assert redacted["legacy_mysql_password"] == "***REDACTED***"
     assert redacted["arbeitsagentur_api_key"] == "***REDACTED***"
     assert "do-not-log" not in repr(redacted)

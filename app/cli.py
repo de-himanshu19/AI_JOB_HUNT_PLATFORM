@@ -32,7 +32,7 @@ from app.services.notifications import NotificationFormatter, NotificationServic
 from app.services.pipeline import PipelineRunRequest, PipelineService
 from app.services.ranking import RankingService
 from app.integrations.telegram import TelegramClient
-from app.integrations.ai import OllamaProvider
+from app.integrations.ai import build_ai_provider
 from app.sources.arbeitsagentur.adapter import ArbeitsagenturAdapter
 from app.sources.arbeitsagentur.client import (
     ArbeitsagenturClient,
@@ -193,6 +193,10 @@ def build_parser() -> argparse.ArgumentParser:
     cv_show.add_argument("--artifact-id", dest="artifact_id_option")
     cv_show.add_argument("--text", action="store_true")
     cv_show.add_argument("--evidence", action="store_true")
+    cv_polish = cv_commands.add_parser("polish")
+    cv_polish.add_argument("artifact_id", nargs="?")
+    cv_polish.add_argument("--artifact-id", dest="artifact_id_option")
+    cv_polish.add_argument("--live-ai", action="store_true")
 
     legacy = commands.add_parser("legacy", help="Import legacy local files safely")
     legacy_commands = legacy.add_subparsers(dest="legacy_command", required=True)
@@ -880,12 +884,26 @@ def _cv(args: argparse.Namespace) -> int:
     database = Database.from_settings(settings)
     migrate(database)
     rules = AnalysisRules.from_json(settings.fit_rules_path)
-    wants_ai = bool(getattr(args, "ai_polish", False))
+    wants_ai = (
+        bool(getattr(args, "ai_polish", False))
+        or getattr(args, "cv_command", None) == "polish"
+    )
     live_ai = bool(getattr(args, "live_ai", False))
+    if wants_ai and not live_ai:
+        print(json.dumps({
+            "ai_polish_requested": True,
+            "ai_status": "failed",
+            "ai_failure_category": "safety_not_enabled",
+            "validation_result": {
+                "valid": False,
+                "errors": ["AI polishing requires both --ai-polish and --live-ai"],
+                "network_requested": False,
+            },
+        }, ensure_ascii=False, indent=2))
+        return 1
     provider = None
     if wants_ai and live_ai:
-        if settings.ai_provider != "rule_based":
-            provider = OllamaProvider(settings)
+        provider = build_ai_provider(settings)
     service = CVGenerationService(
         database, settings, rules, provider=provider
     )
@@ -926,6 +944,11 @@ def _cv(args: argparse.Namespace) -> int:
             )
         print(json.dumps(output, ensure_ascii=False, indent=2))
         return 0
+    elif args.cv_command == "polish":
+        artifact_id = args.artifact_id_option or args.artifact_id
+        if not artifact_id:
+            raise ValueError("cv polish requires a rule-based artifact ID")
+        result = service.polish_artifact(artifact_id, live_ai=live_ai)
     else:
         raise AssertionError("Unhandled CV command")
 
@@ -939,6 +962,7 @@ def _cv(args: argparse.Namespace) -> int:
         "ai_polish_requested": wants_ai,
         "ai_status": result.ai_status,
         "ai_failure_category": result.ai_failure_category,
+        "validation_result": result.ai_validation_result,
         "ai_artifact": _artifact_json(result.ai_artifact) if result.ai_artifact else None,
         "suggested_next_state": "cv_ready",
         "application_status_changed": False,

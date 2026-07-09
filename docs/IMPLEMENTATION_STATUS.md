@@ -93,7 +93,7 @@ External credential rotation remains a manual security gate. No credential value
 - Private evidence reports preserving evidence hierarchy, missing requirements, risks, and version provenance.
 - Additive migration 006 with canonical CV-generation artifacts and durable AI-attempt outcomes while preserving legacy `cv_artifacts` rows.
 - UUID-only atomic artifact storage, content-hash verification, collision protection, and cleanup after persistence failure.
-- Optional Ollama derivatives behind dual explicit opt-in; validation failure always retains the rule-based artifact.
+- Optional AI derivatives behind dual explicit opt-in; validation failure always retains the rule-based artifact.
 - CLI generate/manual/list/show workflows with no application-status mutation and no default network request.
 
 ### Migration Milestone 8
@@ -144,6 +144,19 @@ External credential rotation remains a manual security gate. No credential value
 - Dashboard and CLI workflows can attach a reviewed CV artifact to application tracking and mark the application `cv_ready`.
 - `cv list` supports profile/job filtering, and `cv show` remains metadata-only unless `--text` or `--evidence` is explicitly requested.
 
+### Migration Milestone 13
+
+- Optional OpenAI-compatible API CV polish provider with `AI_ENABLED=false` and `AI_PROVIDER=rule_based` safe defaults.
+- Live AI polish requires explicit CLI/dashboard request and `--live-ai`/confirmation; rule-based CV generation remains offline and authoritative.
+- API provider uses user-supplied `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`, timeout, and retry settings without logging secrets, prompts, CV text, or response bodies.
+- Strict polish prompt preserves facts, dates, employers, contact details, degree names, language levels, work authorization, and FlowCV-friendly plain-text structure.
+- Protected-fact validation gates AI output, rejects unsupported numbers/tools/named facts/stronger wording and broken/private-use characters, and stores AI artifacts only when validated.
+- AI artifacts are separate child records linked by `parent_rule_based_artifact_id`; failed attempts keep the rule-based artifact usable and record safe failure metadata.
+- Failure categories include `configuration_error`, `safety_not_enabled`, `provider_error`, `timeout`, `validation_failed`, `malformed_response`, and `rate_limited`.
+- `cv polish --artifact-id <rule-based-artifact-id> --live-ai` supports polishing an existing rule-based artifact.
+- Dashboard CV Workflow lists AI artifact parent/provider/model/prompt/status metadata without triggering live AI on page load.
+- Application tracking accepts validated AI artifacts and rejects invalid or missing artifacts.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -172,12 +185,13 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 4: `app/domain/duplicates.py`, `app/services/{normalization,deduplication}.py`, `migrations/003_normalization_duplicates.sql`, `config/company_aliases.json`, Milestone 4 tests/fixtures, and `docs/DUPLICATE_CLUSTERING.md`.
 - Milestone 5: generic candidate/analysis domain contracts, requirements/evidence/prefilter/fit/ranking services, `migrations/004_fit_analysis_ranking.sql`, `config/fit_rules.json`, golden tests/fixtures, and `docs/FIT_ANALYSIS.md`.
 - Milestone 6: Telegram integration/notification service, `migrations/005_telegram_notifications.sql`, notification tests, and `docs/TELEGRAM_NOTIFICATIONS.md`.
-- Milestone 7: generic CV builder/validators/storage, optional Ollama provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
+- Milestone 7: generic CV builder/validators/storage, optional AI provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
 - Milestone 8: `app/dashboard`, optional Streamlit extra/launcher, dashboard tests, `.streamlit/config.toml`, and `docs/DASHBOARD.md`.
 - Milestone 9: `app/domain/legacy_import.py`, `app/services/legacy_import.py`, `migrations/007_legacy_import.sql`, legacy import CLI commands, focused tests, and `docs/LEGACY_IMPORT.md`.
 - Milestone 10: `app/services/pipeline.py`, pipeline CLI command, pipeline tests, and `docs/PIPELINE.md`.
 - Milestone 11: application tracking migration/service/repository/CLI/dashboard extensions, focused CRM tests, and `docs/APPLICATION_TRACKING.md`.
 - Milestone 12: CV workflow dashboard/query/action extensions, CV artifact CLI improvements, focused tests, and `docs/CV_WORKFLOW.md`.
+- Milestone 13: OpenAI-compatible AI provider, protected-fact validation extensions, `cv polish` CLI workflow, focused provider/CV/dashboard/application tests, and AI configuration docs.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

@@ -11,7 +11,7 @@ from app.db.connection import Database
 from app.db.repositories import ApplicationRepository, DuplicateRepository
 from app.domain.duplicates import ReviewStatus
 from app.domain.enums import ApplicationStatus
-from app.integrations.ai import OllamaProvider
+from app.integrations.ai import build_ai_provider
 from app.integrations.telegram import TelegramClient
 from app.services.analysis_rules import AnalysisRules
 from app.services.applications import ALLOWED_TRANSITIONS, ApplicationService
@@ -243,5 +243,5 @@ class DashboardActions:
         if not requested:
             return None
         if self.settings.ai_provider == "rule_based":
-            raise ConfirmationRequired("Configure an Ollama provider first")
-        return OllamaProvider(self.settings)
+            return None
+        return build_ai_provider(self.settings)

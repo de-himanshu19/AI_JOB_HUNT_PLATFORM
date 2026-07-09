@@ -690,6 +690,10 @@ class CVBuilder:
         return lowered
 
     @staticmethod
+    def protected_facts(data: dict[str, Any]) -> list[str]:
+        return CVBuilder._protected_facts(data)
+
+    @staticmethod
     def _protected_facts(data: dict[str, Any]) -> list[str]:
         values: list[str] = []
         personal = data.get("personal_info", {})

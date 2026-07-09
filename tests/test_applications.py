@@ -300,6 +300,66 @@ def test_invalid_priority_date_and_missing_cv_fail_clearly(
         service.mark_cv_ready(profile.id, job.id, cv_artifact_id="missing")
 
 
+def test_validated_ai_artifact_can_attach_and_invalid_artifact_is_rejected(
+    database: Database, master_cv_data: dict
+) -> None:
+    job, profile = _setup_entities(database, master_cv_data)
+    parent_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    ai_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    invalid_id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    with database.transaction() as connection:
+        for artifact_id, source, parent, validated in (
+            (parent_id, "rule_based", None, 1),
+            (ai_id, "ai_polished", parent_id, 1),
+            (invalid_id, "ai_polished", parent_id, 0),
+        ):
+            connection.execute(
+                """INSERT INTO cv_generation_artifacts (
+                    id, job_id, logical_cluster_id, description_id,
+                    description_content_hash, description_completeness, profile_id,
+                    profile_version, profile_content_hash, analysis_id,
+                    analyzer_version, rules_version, generator_version,
+                    formatter_version, generation_mode, generation_identity,
+                    artifact_format, source, parent_rule_based_artifact_id,
+                    artifact_path, evidence_report_path, content_hash,
+                    evidence_report_hash, provider, model, prompt_version,
+                    ai_generated_at, validated, validation_result_json, created_at
+                ) VALUES (
+                    ?, NULL, NULL, NULL, ?, 'full', ?, 1, ?, NULL,
+                    'analyzer', 'rules', 'generator', 'formatter',
+                    'manual_jd', ?, 'flowcv_txt', ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, '{"valid": true}', '2026-07-09'
+                )""",
+                (
+                    artifact_id,
+                    "d" * 64,
+                    str(profile.id),
+                    profile.content_hash,
+                    artifact_id.replace("-", "")[:64].ljust(64, "0"),
+                    source,
+                    parent,
+                    f"{artifact_id}.txt",
+                    f"{artifact_id}.evidence.txt",
+                    "c" * 64,
+                    "e" * 64,
+                    "openai_compatible" if source == "ai_polished" else None,
+                    "test-model" if source == "ai_polished" else None,
+                    "m13-cv-polish-v1" if source == "ai_polished" else None,
+                    "2026-07-09T00:00:00+00:00"
+                    if source == "ai_polished" else None,
+                    validated,
+                ),
+            )
+
+    service = ApplicationService(database)
+    ready = service.mark_cv_ready(profile.id, job.id, cv_artifact_id=ai_id)
+
+    assert ready.status is ApplicationStatus.CV_READY
+    assert str(ready.cv_artifact_id) == ai_id
+    with pytest.raises(ValueError, match="validated CV artifacts"):
+        service.mark_cv_ready(profile.id, job.id, cv_artifact_id=invalid_id)
+
+
 def test_applications_cli_shortlist_list_due_and_history(
     monkeypatch, settings, database: Database, master_cv_data: dict, capsys
 ) -> None:

@@ -39,14 +39,21 @@ from app.domain.cv import (
     GenerationMode,
 )
 from app.domain.enums import ArtifactSource, DescriptionCompleteness
-from app.integrations.ai.base import AIProvider
+from app.integrations.ai.base import (
+    AIConfigurationError,
+    AIMalformedResponseError,
+    AIProvider,
+    AIProviderError,
+    AIRateLimitError,
+    AISafetyNotEnabledError,
+)
 from app.services.analysis_rules import AnalysisRules
 from app.services.evidence import EvidenceMatcher
 from app.services.fit_analysis import FitAnalysisService
 from app.services.requirements import RequirementsAnalyzer
 
 
-PROMPT_VERSION = "m7-cv-polish-v1"
+PROMPT_VERSION = "m13-cv-polish-v1"
 
 
 def _hash_text(value: str) -> str:
@@ -67,6 +74,7 @@ class CVGenerationResult:
     ai_status: str = "not_requested"
     ai_artifact: CVGenerationArtifact | None = None
     ai_failure_category: str | None = None
+    ai_validation_result: dict[str, object] | None = None
 
 
 class CVGenerationService:
@@ -295,6 +303,34 @@ class CVGenerationService:
             raise FileNotFoundError(f"{label} file not found: {path}")
         return path.read_text(encoding="utf-8")
 
+    def polish_artifact(
+        self,
+        artifact_id: UUID | str,
+        *,
+        live_ai: bool = False,
+    ) -> CVGenerationResult:
+        if not live_ai:
+            raise ValueError("AI polishing an existing artifact requires --live-ai")
+        with self.database.read_connection() as connection:
+            repository = CVGenerationArtifactRepository(connection)
+            artifact = repository.get(artifact_id)
+            if artifact is None:
+                raise KeyError(f"CV artifact not found: {artifact_id}")
+            if artifact.source is not ArtifactSource.RULE_BASED:
+                raise ValueError("cv polish requires a rule-based parent artifact")
+            profile = CandidateProfileRepository(connection).get(artifact.profile_id)
+            if profile is None:
+                raise KeyError(f"Candidate profile not found: {artifact.profile_id}")
+        self._verify_cached(artifact)
+        return self._maybe_polish(
+            artifact,
+            artifact.artifact_path.read_text(encoding="utf-8"),
+            artifact.evidence_report_path.read_text(encoding="utf-8"),
+            tuple(self.builder.protected_facts(profile.profile_data)),
+            cache_hit=True,
+            requested=True,
+        )
+
     def _identity(self, **values) -> str:
         profile = values.pop("profile")
         return _stable_hash({
@@ -362,24 +398,32 @@ class CVGenerationService:
                 SimpleNamespace(name="unconfigured", model="unconfigured"),
                 datetime.now(UTC),
                 "configuration_error",
-                {"valid": False, "errors": ["configured AI provider required"]},
+                self._attempt_result(
+                    {"valid": False, "errors": ["configured AI provider required"]},
+                    network_requested=False,
+                ),
                 cache_hit,
+                network_requested=False,
             )
         generated_at = datetime.now(UTC)
-        prompt = self._prompt(rule_text)
+        prompt = self._prompt(rule_text, facts)
         try:
             polished = provider.polish(prompt)
             if not isinstance(polished, str):
                 raise ValueError("AI provider returned malformed content")
             validation = self.validator.validate_ai(polished, rule_text, facts)
+            validation_result = self._attempt_result(
+                validation.as_dict(), network_requested=True
+            )
             if not validation.valid:
                 return self._record_ai_failure(
                     artifact, provider, generated_at, "validation_failed",
-                    validation.as_dict(), cache_hit,
+                    validation_result, cache_hit, network_requested=True,
                 )
             derivative_report = report_text + (
                 "\nAI DERIVATIVE RESULT\nAI used: yes\n"
                 f"Provider: {provider.name}\nModel: {provider.model}\n"
+                f"Prompt version: {PROMPT_VERSION}\n"
                 "AI validation/fallback: validated derivative stored\n"
             )
             derivative_id = uuid4()
@@ -399,7 +443,7 @@ class CVGenerationService:
                 "evidence_report_hash": _hash_text(derivative_report),
                 "provider": provider.name, "model": provider.model,
                 "prompt_version": PROMPT_VERSION, "ai_generated_at": generated_at,
-                "validation_result": validation.as_dict(), "created_at": generated_at,
+                "validation_result": validation_result, "created_at": generated_at,
             })
             attempt = CVAIAttempt(
                 parent_rule_based_artifact_id=artifact.id,
@@ -407,7 +451,7 @@ class CVGenerationService:
                 model=provider.model, prompt_version=PROMPT_VERSION,
                 status=AIAttemptStatus.SUCCEEDED,
                 evidence_report_path=report_path,
-                validation_result=validation.as_dict(), generated_at=generated_at,
+                validation_result=validation_result, generated_at=generated_at,
             )
             try:
                 with self.database.transaction() as connection:
@@ -418,27 +462,90 @@ class CVGenerationService:
                 self.store.cleanup(cv_path, report_path)
                 raise
             return CVGenerationResult(
-                artifact, cache_hit, ai_status="succeeded", ai_artifact=derivative
+                artifact, cache_hit, ai_status="succeeded", ai_artifact=derivative,
+                ai_validation_result=validation_result,
+            )
+        except AISafetyNotEnabledError:
+            return self._record_ai_failure(
+                artifact, provider, generated_at, "safety_not_enabled",
+                self._attempt_result(
+                    {"valid": False, "errors": ["AI_ENABLED must be true"]},
+                    network_requested=False,
+                ),
+                cache_hit,
+                network_requested=False,
+            )
+        except AIConfigurationError:
+            return self._record_ai_failure(
+                artifact, provider, generated_at, "configuration_error",
+                self._attempt_result(
+                    {"valid": False, "errors": ["AI configuration is incomplete"]},
+                    network_requested=False,
+                ),
+                cache_hit,
+                network_requested=False,
+            )
+        except AIRateLimitError:
+            return self._record_ai_failure(
+                artifact, provider, generated_at, "rate_limited",
+                self._attempt_result(
+                    {"valid": False, "errors": ["provider rate limit"]},
+                    network_requested=True,
+                ),
+                cache_hit,
+                network_requested=True,
+            )
+        except AIMalformedResponseError:
+            return self._record_ai_failure(
+                artifact, provider, generated_at, "malformed_response",
+                self._attempt_result(
+                    {"valid": False, "errors": ["malformed_response"]},
+                    network_requested=True,
+                ),
+                cache_hit,
+                network_requested=True,
             )
         except requests.Timeout:
             return self._record_ai_failure(
                 artifact, provider, generated_at, "timeout",
-                {"valid": False, "errors": ["provider timeout"]}, cache_hit,
+                self._attempt_result(
+                    {"valid": False, "errors": ["provider timeout"]},
+                    network_requested=True,
+                ),
+                cache_hit,
+                network_requested=True,
             )
-        except (requests.RequestException, ValueError) as error:
-            category = "malformed_content" if isinstance(error, ValueError) else "provider_error"
+        except (requests.RequestException, AIProviderError, ValueError) as error:
+            category = (
+                "malformed_response" if isinstance(error, ValueError)
+                else "provider_error"
+            )
             return self._record_ai_failure(
                 artifact, provider, generated_at, category,
-                {"valid": False, "errors": [category]}, cache_hit,
+                self._attempt_result(
+                    {"valid": False, "errors": [category]},
+                    network_requested=True,
+                ),
+                cache_hit,
+                network_requested=True,
             )
         except Exception:
             return self._record_ai_failure(
                 artifact, provider, generated_at, "provider_error",
-                {"valid": False, "errors": ["provider_error"]}, cache_hit,
+                self._attempt_result(
+                    {"valid": False, "errors": ["provider_error"]},
+                    network_requested=True,
+                ),
+                cache_hit,
+                network_requested=True,
             )
 
-    def _record_ai_failure(self, artifact, provider, generated_at, category, result, cache_hit):
+    def _record_ai_failure(
+        self, artifact, provider, generated_at, category, result, cache_hit, *,
+        network_requested=False,
+    ):
         attempt_id = uuid4()
+        result = self._attempt_result(result, network_requested=network_requested)
         report_text = "\n".join((
             "PRIVATE AI ATTEMPT REPORT - NOT RECRUITER-FACING",
             f"Parent rule-based artifact: {artifact.id}",
@@ -448,6 +555,7 @@ class CVGenerationService:
             f"Generated at: {generated_at.isoformat()}",
             "Status: failed",
             f"Failure category: {category}",
+            f"Network requested: {str(network_requested).lower()}",
             "Validation/fallback: authoritative rule-based artifact retained",
             *[f"- {error}" for error in result.get("errors", [])],
             "",
@@ -468,8 +576,17 @@ class CVGenerationService:
             self.store.cleanup(report_path)
             raise
         return CVGenerationResult(
-            artifact, cache_hit, ai_status="failed", ai_failure_category=category
+            artifact, cache_hit, ai_status="failed", ai_failure_category=category,
+            ai_validation_result=result,
         )
+
+    @staticmethod
+    def _attempt_result(
+        result: dict[str, object], *, network_requested: bool
+    ) -> dict[str, object]:
+        merged = dict(result)
+        merged["network_requested"] = network_requested
+        return merged
 
     def _verify_cached(self, artifact):
         if not artifact.validated:
@@ -486,13 +603,22 @@ class CVGenerationService:
 
     @staticmethod
     def _validate_ai_flags(ai_polish, live_ai):
-        if ai_polish != live_ai:
+        if ai_polish and not live_ai:
             raise ValueError("AI polishing requires both --ai-polish and --live-ai")
 
     @staticmethod
-    def _prompt(rule_text):
+    def _prompt(rule_text, protected_facts):
+        facts = "\n".join(f"- {fact}" for fact in protected_facts)
         return (
-            "Polish the following plain-text CV without adding, removing, or changing "
-            "facts, numbers, tools, employers, titles, dates, language levels, projects, "
-            "or section headings. Return only the complete CV text.\n\n" + rule_text
+            "Polish language only for the following FlowCV plain-text CV.\n"
+            "Keep the same facts. Do not invent employers, dates, tools, degrees, "
+            "certifications, metrics, locations, languages, visa status, job titles, "
+            "or new claims. Do not remove protected facts. Keep section headings, "
+            "contact details, dates, names, employers, degrees, visa/work authorization, "
+            "and language levels unchanged. Keep the CV concise and 2-page-friendly. "
+            "Use professional but realistic wording for a career-transition Data Analyst "
+            "profile. Do not exaggerate seniority and do not claim the candidate has "
+            "worked as a Data Analyst unless the source text says so. Return only the "
+            "complete CV text.\n\nPROTECTED FACTS\n"
+            f"{facts}\n\nRULE-BASED CV\n{rule_text}"
         )

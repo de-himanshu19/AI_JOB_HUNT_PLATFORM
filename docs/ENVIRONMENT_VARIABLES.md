@@ -80,15 +80,14 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 TELEGRAM_TOP_N=20
 
-# AI (all optional because rule-based CV generation remains available)
+# AI CV polish (optional; rule-based CV generation remains available offline)
+AI_ENABLED=false
 AI_PROVIDER=rule_based
-AI_OLLAMA_API_KEY=
-OLLAMA_API_KEY=
-AI_OLLAMA_LOCAL_URL=http://localhost:11434/api/generate
-AI_OLLAMA_CLOUD_URL=https://ollama.com/api/generate
-AI_LOCAL_MODEL=llama3.2:3b
-AI_CLOUD_MODEL=gpt-oss:20b
-AI_TIMEOUT_SECONDS=120
+AI_API_KEY=
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4.1-mini
+AI_TIMEOUT_SECONDS=30
+AI_MAX_RETRIES=2
 CV_ARTIFACT_ROOT=data/cv_artifacts
 CV_MANUAL_MAX_BYTES=1000000
 OPENAI_API_KEY=
@@ -107,6 +106,15 @@ MYSQL_DATABASE=
 2. Resolve paths relative to the repository/application root, not `cwd`.
 3. Prefer the unified name, then a documented legacy alias. Emit a deprecation warning naming the variable, never its value.
 4. Preserve `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `OPENAI_API_KEY`, and the five `MYSQL_*` names until migration is complete.
-5. Validate required settings only when the related feature is enabled. The dashboard and rule-based CV builder must start without Telegram, MySQL, or AI credentials.
+5. Validate required settings only when the related feature is explicitly used. The dashboard and rule-based CV builder must start without Telegram, MySQL, or AI credentials.
 6. Redact values whose names contain `TOKEN`, `KEY`, `SECRET`, `PASSWORD`, or `CHAT_ID` from configuration dumps and exception contexts.
 7. Rotate all credentials discovered in legacy files before the first integration run.
+
+## Milestone 13 AI polish safety
+
+Use `AI_PROVIDER=openai_compatible` only for explicit API-based CV polish.
+`AI_ENABLED=false` and `AI_PROVIDER=rule_based` are safe defaults. Never commit a
+real `AI_API_KEY` or `.env` file. API polish sends CV text to the configured
+external service, and the resulting text is stored only if protected-fact
+validation passes. Automated tests use fake providers and do not make live AI,
+Telegram, Arbeitsagentur, EnglishJobs, email, or Ollama requests.

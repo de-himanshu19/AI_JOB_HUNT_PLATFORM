@@ -174,11 +174,16 @@ class Settings(BaseModel):
     telegram_max_retries: int = Field(default=3, ge=0, le=10)
     telegram_backoff_seconds: float = Field(default=0.5, ge=0, le=60)
 
+    ai_enabled: bool = False
     ai_provider: str = "rule_based"
+    ai_api_key: SecretStr | None = None
+    ai_base_url: str = "https://api.openai.com/v1"
+    ai_model: str = "gpt-4.1-mini"
     ai_ollama_api_key: SecretStr | None = None
     ai_local_model: str = "llama3.2:3b"
     ai_cloud_model: str = "gpt-oss:20b"
-    ai_timeout_seconds: float = Field(default=120, gt=0, le=600)
+    ai_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    ai_max_retries: int = Field(default=2, ge=0, le=5)
 
     legacy_mysql_enabled: bool = False
     legacy_mysql_host: str | None = None
@@ -200,13 +205,9 @@ class Settings(BaseModel):
             raise ValueError(
                 "Telegram credentials are required only when TELEGRAM_ENABLED=true"
             )
-        allowed_ai = {"rule_based", "local_ollama", "ollama_cloud"}
+        allowed_ai = {"rule_based", "openai_compatible"}
         if self.ai_provider not in allowed_ai:
             raise ValueError(f"AI_PROVIDER must be one of {sorted(allowed_ai)}")
-        if self.ai_provider == "ollama_cloud" and self.ai_ollama_api_key is None:
-            raise ValueError(
-                "AI_OLLAMA_API_KEY is required only when AI_PROVIDER=ollama_cloud"
-            )
         if not self.arbeitsagentur_queries:
             raise ValueError("At least one Arbeitsagentur search query is required")
         if self.legacy_mysql_enabled and (
@@ -405,13 +406,22 @@ def settings_from_mapping(
         telegram_backoff_seconds=_first(
             values, "TELEGRAM_BACKOFF_SECONDS", default="0.5"
         ),
+        ai_enabled=_first(values, "AI_ENABLED", default="false"),
         ai_provider=_first(values, "AI_PROVIDER", default="rule_based"),
+        ai_api_key=_first(
+            values, "AI_API_KEY", "AI_OPENAI_API_KEY", "OPENAI_API_KEY"
+        ),
+        ai_base_url=_first(
+            values, "AI_BASE_URL", default="https://api.openai.com/v1"
+        ),
+        ai_model=_first(values, "AI_MODEL", default="gpt-4.1-mini"),
         ai_ollama_api_key=_first(
             values, "AI_OLLAMA_API_KEY", "OLLAMA_API_KEY"
         ),
         ai_local_model=_first(values, "AI_LOCAL_MODEL", default="llama3.2:3b"),
         ai_cloud_model=_first(values, "AI_CLOUD_MODEL", default="gpt-oss:20b"),
-        ai_timeout_seconds=_first(values, "AI_TIMEOUT_SECONDS", default="120"),
+        ai_timeout_seconds=_first(values, "AI_TIMEOUT_SECONDS", default="30"),
+        ai_max_retries=_first(values, "AI_MAX_RETRIES", default="2"),
         legacy_mysql_enabled=_first(
             values, "LEGACY_MYSQL_ENABLED", default="false"
         ),

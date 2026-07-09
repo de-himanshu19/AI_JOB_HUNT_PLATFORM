@@ -468,6 +468,22 @@ class DashboardQueryService:
                     c.profile_id, p.profile_key, c.generation_mode, c.source,
                     c.generator_version, c.formatter_version,
                     ? AS builder_content_version,
+                    c.parent_rule_based_artifact_id, c.provider, c.model,
+                    c.prompt_version, c.ai_generated_at,
+                    (
+                        SELECT ca.status FROM cv_ai_attempts ca
+                        WHERE ca.parent_rule_based_artifact_id =
+                            COALESCE(c.parent_rule_based_artifact_id, c.id)
+                        ORDER BY ca.generated_at DESC, ca.id DESC
+                        LIMIT 1
+                    ) AS ai_status,
+                    (
+                        SELECT ca.failure_category FROM cv_ai_attempts ca
+                        WHERE ca.parent_rule_based_artifact_id =
+                            COALESCE(c.parent_rule_based_artifact_id, c.id)
+                        ORDER BY ca.generated_at DESC, ca.id DESC
+                        LIMIT 1
+                    ) AS ai_failure_category,
                     c.validated, c.artifact_path, c.evidence_report_path,
                     c.created_at, j.title_raw, j.company_raw, j.location_raw,
                     a.status AS application_status,

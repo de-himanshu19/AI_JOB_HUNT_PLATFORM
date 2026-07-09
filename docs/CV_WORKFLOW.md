@@ -6,7 +6,8 @@ attaching reviewed CVs to application tracking.
 
 The workflow is local and explicit. It does not generate PDF/DOCX files, send
 email, send Telegram messages, auto-apply, call AI polish, or attach CVs without
-a user action.
+a user action. Optional API-based AI polish is disabled by default and requires
+explicit configuration plus a live confirmation.
 
 ## Generate A CV
 
@@ -21,6 +22,24 @@ Manual JD fallback remains available for local UTF-8 text files:
 ```powershell
 python -m app.cli cv generate-manual --description-file <path> --profile-id <PROFILE_ID>
 ```
+
+Optional API polish can be requested during generation only when the user has
+configured `AI_ENABLED=true`, `AI_PROVIDER=openai_compatible`, and
+`AI_API_KEY` locally:
+
+```powershell
+python -m app.cli cv generate --job-id <JOB_ID> --profile-id <PROFILE_ID> --force-regenerate --ai-polish --live-ai
+```
+
+Polish an existing reviewed rule-based artifact:
+
+```powershell
+python -m app.cli cv polish --artifact-id <RULE_BASED_ARTIFACT_ID> --live-ai
+```
+
+This sends CV text to the configured external AI API. The rule-based artifact
+remains authoritative, and AI output is stored only as a separate validated
+child artifact.
 
 ## List Artifacts
 
@@ -82,6 +101,8 @@ python -m app.cli applications attach-cv --profile-id <PROFILE_ID> --job-id <JOB
 The command validates the profile, job, and artifact, updates
 `applications.cv_artifact_id`, moves the status to `cv_ready`, and appends an
 immutable application event. It does not submit the application.
+Validated AI artifacts can be attached like rule-based artifacts. Failed or
+invalid AI attempts do not produce attachable ready CV artifacts.
 
 ## Dashboard Workflow
 
@@ -96,9 +117,13 @@ Use the **CV Workflow** page to:
 - Generate a rule-based CV for a stored full-description job.
 - List recent generated CV artifacts.
 - Select an artifact and inspect metadata.
+- Distinguish `rule_based` and `ai_polished` artifacts, including parent,
+  provider, model, prompt, and AI attempt status metadata where available.
 - Explicitly reveal the FlowCV TXT content for copying.
 - Explicitly reveal the private evidence report when needed.
 - Attach a selected artifact to a tracked application and mark it `cv_ready`.
 
 The dashboard reads only artifact paths stored in SQLite. Missing local files
 show a clear warning instead of failing the page.
+The page never calls live AI on load. Any dashboard AI trigger requires an
+explicit checkbox acknowledging that CV text will be sent to an external API.

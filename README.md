@@ -1,6 +1,6 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0-11 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application tracking, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, an optional local Streamlit dashboard, dry-run-first legacy local-file import, safe one-command pipeline orchestration, and a local Application Tracking CRM.
+This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0-13 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application tracking, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, optional API-based AI CV polish, an optional local Streamlit dashboard, dry-run-first legacy local-file import, safe one-command pipeline orchestration, and a local Application Tracking CRM.
 
 The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
 
@@ -30,13 +30,13 @@ Implemented:
 - Immutable analysis/ranking caches keyed by profile, description, and rule versions.
 - Offline Telegram preview plus explicit live send/retry with cluster-level idempotency.
 - Auditable notification batches, logical-vacancy items, and chunk delivery attempts.
-- Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validated Ollama derivatives.
+- Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validation-gated API AI derivatives.
 - Optional local dashboard for source-neutral review, lifecycle tracking, duplicate decisions, CV preparation, notification history, and safe diagnostics.
 - Additive legacy import audit tables, verified SQLite backup gate, local CSV/JSON/TXT importers, fixture-only MySQL reader boundary, and conservative notification-history mapping.
 - Safe one-command local pipeline orchestration for collection, deduplication, analysis, ranking, notification preview, top-job display, and JSON summaries.
 - Local application tracking commands and dashboard workflow for shortlisted, CV-ready, applied, interview, offer, rejected, withdrawn, and skipped jobs.
 
-Not implemented yet: scheduling, application submission/auto-apply, PDF/DOCX, cover letters, OpenAI integration, real MySQL import, or destructive legacy cleanup.
+Not implemented yet: scheduling, application submission/auto-apply, PDF/DOCX, cover letters, real MySQL import, or destructive legacy cleanup.
 
 ## Requirements
 
@@ -219,8 +219,10 @@ python -m app.cli cv list --job-id <job-id>
 python -m app.cli cv show --artifact-id <artifact-id> --text
 ```
 
-Stored jobs require a full description. Optional Ollama polishing requires both
-`--ai-polish` and `--live-ai`; failures retain the rule-based artifact. See
+Stored jobs require a full description. Optional API-based AI polishing requires
+`AI_ENABLED=true`, `AI_PROVIDER=openai_compatible`, a user-provided
+`AI_API_KEY`, and both `--ai-polish` and `--live-ai`; failures retain the
+rule-based artifact. See
 [the CV generation guide](docs/CV_GENERATION.md) for provenance, validation,
 cache identity, and artifact-security details. See
 [the CV workflow guide](docs/CV_WORKFLOW.md) for dashboard preview, copy, and

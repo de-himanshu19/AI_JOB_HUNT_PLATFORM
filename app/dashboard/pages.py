@@ -563,9 +563,9 @@ def cv_builder_page() -> None:
             "version": profile["version"], "display_name": profile["display_name"],
             "active": profile["active"], "profile_data": profile["profile_data"],
         })
-    ai_requested = st.checkbox("Request optional Ollama polish", value=False)
+    ai_requested = st.checkbox("Request optional API AI polish", value=False)
     live_ai = st.checkbox(
-        "I understand this makes an explicit live AI request",
+        "I understand this sends CV text to an external AI API",
         value=False, disabled=not ai_requested,
     )
     if context.settings.ai_provider == "rule_based":
@@ -640,7 +640,8 @@ def cv_builder_page() -> None:
     artifact_columns = [
         "artifact_id", "title_raw", "company_raw", "location_raw",
         "generation_mode", "source", "formatter_version",
-        "builder_content_version", "validated", "application_status",
+        "builder_content_version", "validated", "parent_rule_based_artifact_id",
+        "provider", "model", "ai_status", "application_status",
         "attached_cv_artifact_id", "created_at",
     ]
     st.dataframe(

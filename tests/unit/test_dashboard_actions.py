@@ -74,11 +74,12 @@ def test_live_actions_remain_disabled_without_configuration_and_confirmation(tmp
             "Data Analyst requires SQL", profile.id,
             ai_polish=True, live_ai_confirmed=False,
         )
-    with pytest.raises(ConfirmationRequired, match="Configure an Ollama"):
-        actions.generate_manual_cv(
-            "Data Analyst requires SQL", profile.id,
-            ai_polish=True, live_ai_confirmed=True,
-        )
+    result = actions.generate_manual_cv(
+        "Data Analyst requires SQL", profile.id,
+        ai_polish=True, live_ai_confirmed=True,
+    )
+    assert result.ai_status == "failed"
+    assert result.ai_failure_category == "configuration_error"
 
 
 def test_duplicate_and_split_actions_require_confirmation(tmp_path) -> None:
