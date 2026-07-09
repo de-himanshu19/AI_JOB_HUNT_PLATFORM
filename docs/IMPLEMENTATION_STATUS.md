@@ -157,6 +157,19 @@ External credential rotation remains a manual security gate. No credential value
 - Dashboard CV Workflow lists AI artifact parent/provider/model/prompt/status metadata without triggering live AI on page load.
 - Application tracking accepts validated AI artifacts and rejects invalid or missing artifacts.
 
+### Migration Milestone 14
+
+- Portfolio-quality README focused on problem statement, workflow, safety,
+  local-first design, setup, daily usage, limitations, and roadmap.
+- Mermaid architecture and daily workflow diagrams added for GitHub rendering.
+- Demo guide added with safe offline commands, bounded live collection example,
+  dashboard launch, CV generation, optional AI polish, application attachment,
+  and history review.
+- Architecture, safety, and roadmap docs added without changing runtime product
+  behavior.
+- Screenshot placeholders only; no private images, generated CV artifacts,
+  runtime data, secrets, or local database content committed.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -192,6 +205,8 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 11: application tracking migration/service/repository/CLI/dashboard extensions, focused CRM tests, and `docs/APPLICATION_TRACKING.md`.
 - Milestone 12: CV workflow dashboard/query/action extensions, CV artifact CLI improvements, focused tests, and `docs/CV_WORKFLOW.md`.
 - Milestone 13: OpenAI-compatible and native Ollama Cloud AI providers, protected-fact validation extensions, `cv polish` CLI workflow, focused provider/CV/dashboard/application tests, and AI configuration docs.
+- Milestone 14: portfolio README plus `docs/DEMO.md`,
+  `docs/ARCHITECTURE.md`, `docs/SAFETY.md`, and `docs/ROADMAP.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -213,7 +228,9 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: updated by later milestone verification runs; live smoke tests remain explicitly disabled unless opted in.
+- Fixture-only pytest suite: latest Milestone 14 verification target is
+  `python -m pytest`; live smoke tests remain explicitly disabled unless opted
+  in.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.
@@ -241,4 +258,5 @@ python -m pytest
 
 ## Next recommended milestone
 
-Stop here pending checkpoint approval. Do not begin Milestone 10 or broader scheduling/cleanup work without a separate plan.
+Stop here pending checkpoint approval. Do not begin scheduling, deployment, or
+new product functionality without a separate plan.

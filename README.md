@@ -1,47 +1,126 @@
 # AI Job Hunt Platform
 
-This repository contains the source-independent core for a local job-hunting platform. Migration Milestones 0-13 are implemented: typed configuration, shared domain models, versioned SQLite persistence, audited application tracking, two fixture-backed source adapters, explainable cross-source duplicate clustering, deterministic fit analysis/ranking, opt-in Telegram top-20 delivery, truthful FlowCV generation, optional API-based AI CV polish, an optional local Streamlit dashboard, dry-run-first legacy local-file import, safe one-command pipeline orchestration, and a local Application Tracking CRM.
+A local-first job search automation platform that collects roles, deduplicates
+vacancies, scores job fit, supports application tracking, and generates
+truthful FlowCV-ready CV text without auto-applying or making hidden network
+calls.
 
-The five projects under `existing_projects/` are read-only legacy references. The unified core does not import or modify them.
+## Problem
 
-## Current scope
+Job hunting becomes messy quickly: listings are duplicated across sources, job
+descriptions vary in quality, fit decisions are hard to compare, CV tailoring is
+time-consuming, and application follow-up lives in scattered notes. This project
+turns that workflow into a reproducible local system with auditable data and
+explicit safety gates.
 
-Implemented:
+## What It Does
 
-- Root-relative, typed settings with one-time `.env` loading and secret redaction.
-- Approved policy defaults: retain German jobs, configurable language-risk penalty, optional strict exclusion disabled, and banking as a ranking bonus.
-- Common job, description, candidate, analysis, application, run, notification, and FlowCV-artifact models.
-- SQLite with foreign keys, WAL mode, busy timeout, ordered migrations, and transaction rollback.
-- Versioned candidate profiles and source/source-job-ID uniqueness.
-- Application Tracking CRM with priority, notes, follow-up dates, CV artifact links, and immutable transition history.
-- Fixture-only tests with no external calls.
-- Arbeitsagentur v6 search and v4 detail parsing behind a source-independent contract.
-- Bounded pagination, retries/backoff, source-ID deduplication, description versioning, and collection-run metrics.
-- EnglishJobs state and keyword/location collection behind the same collection service and SQLite persistence flow.
-- EnglishJobs same-source identity handling using listing IDs, normalized URLs, and deterministic fallback fingerprints.
-- Explicit EnglishJobs description completeness handling: `full`, `snippet`, or `missing`.
-- Offline fixture dry run and an explicitly opt-in live command.
-- Versioned title, company, location, description, and URL normalization.
-- Explainable cross-source duplicate clusters with conservative gray-zone review.
-- Idempotent offline backfill plus transactional merge, split, and rollback operations.
-- Generic versioned candidate-profile import and inspection.
-- Evidence-backed full-description fit analysis with explicit missing evidence, penalties, and caps.
-- Source-neutral logical-vacancy ranking with visible components and stable ties.
-- Immutable analysis/ranking caches keyed by profile, description, and rule versions.
-- Offline Telegram preview plus explicit live send/retry with cluster-level idempotency.
-- Auditable notification batches, logical-vacancy items, and chunk delivery attempts.
-- Offline, job-ID-driven FlowCV generation with immutable provenance, private evidence reports, manual-JD fallback, and optional validation-gated API AI derivatives.
-- Optional local dashboard for source-neutral review, lifecycle tracking, duplicate decisions, CV preparation, notification history, and safe diagnostics.
-- Additive legacy import audit tables, verified SQLite backup gate, local CSV/JSON/TXT importers, fixture-only MySQL reader boundary, and conservative notification-history mapping.
-- Safe one-command local pipeline orchestration for collection, deduplication, analysis, ranking, notification preview, top-job display, and JSON summaries.
-- Local application tracking commands and dashboard workflow for shortlisted, CV-ready, applied, interview, offer, rejected, withdrawn, and skipped jobs.
+The platform ingests jobs from supported sources, stores them in SQLite,
+normalizes and deduplicates listings, runs deterministic fit analysis against a
+versioned candidate profile, ranks logical vacancies, previews notifications,
+tracks application state, and creates FlowCV text artifacts. Optional AI polish
+can improve wording, but only when explicitly enabled and only when protected
+facts still validate.
 
-Not implemented yet: scheduling, application submission/auto-apply, PDF/DOCX, cover letters, real MySQL import, or destructive legacy cleanup.
+## Why It Matters
 
-## Requirements
+The goal is not to automate away human judgment. The goal is to make the
+judgment easier: show the best matches first, preserve evidence, avoid duplicate
+work, keep application history clean, and produce CV drafts that remain truthful
+to the candidate's verified profile.
 
-- Python 3.11 or newer
-- No MySQL, Telegram, OpenAI, Ollama, or source credentials are required
+## Core Workflow
+
+```mermaid
+flowchart LR
+    Profile["Candidate profile"] --> Analysis["Fit analysis"]
+    Sources["Job sources<br/>Arbeitsagentur<br/>EnglishJobs"] --> SQLite["SQLite persistence"]
+    SQLite --> Dedup["Deduplication"]
+    Dedup --> Analysis
+    Analysis --> Ranking["Ranking"]
+    Ranking --> Dashboard["Streamlit dashboard"]
+    Ranking --> Notify["Telegram preview"]
+    Ranking --> CV["Rule-based CV generation"]
+    Dashboard --> Tracking["Application tracking"]
+    CV --> Tracking
+    CV --> AI["Optional safe AI polish"]
+    AI --> Tracking
+```
+
+## Daily Workflow
+
+```mermaid
+flowchart TD
+    Pipeline["Run pipeline"] --> Review["Review top jobs"]
+    Review --> Shortlist["Shortlist promising roles"]
+    Shortlist --> Generate["Generate FlowCV text"]
+    Generate --> Polish["Optional AI polish"]
+    Polish --> Attach["Attach CV artifact"]
+    Generate --> Attach
+    Attach --> Apply["Apply manually outside the app"]
+    Apply --> FollowUp["Track follow-up and history"]
+```
+
+## Tech Stack
+
+- Python 3.11+
+- SQLite with ordered migrations, WAL mode, foreign keys, and repository layer
+- Pydantic settings and typed domain models
+- Requests-based source and AI provider integrations with injectable transports
+- Streamlit dashboard as an optional local UI
+- Pytest fixture-first test suite with opt-in live smoke tests only
+- Mermaid diagrams in documentation
+
+## Feature Overview
+
+- One-command pipeline for collection, deduplication, analysis, ranking,
+  notification preview, and JSON summaries.
+- Arbeitsagentur and EnglishJobs collection behind source-neutral contracts.
+- Description completeness tracking: `full`, `snippet`, and `missing`.
+- SQLite persistence for jobs, descriptions, profiles, analyses, rankings,
+  notifications, application events, CV artifacts, and legacy import metadata.
+- Explainable deduplication with conservative gray-zone review.
+- Deterministic fit analysis and logical-vacancy ranking.
+- Offline Telegram preview and opt-in live delivery workflow.
+- Local Streamlit dashboard for review, duplicate decisions, applications,
+  CV workflow, notifications, and run diagnostics.
+- Application Tracking CRM with shortlist, status, priority, notes, follow-up
+  dates, CV artifact links, and immutable history.
+- Rule-based FlowCV text generation with private evidence reports.
+- Safe API-based AI CV polish using OpenAI-compatible or native Ollama Cloud
+  providers.
+- Protected-fact validation so AI output cannot silently change dates,
+  employers, contact details, work authorization, education, languages, or
+  other verified facts.
+- Dry-run-first legacy import support for local CSV, JSON, TXT, and fixture
+  MySQL reader workflows.
+
+## Safety Principles
+
+- Local-first by default: the app starts without credentials or API keys.
+- No auto-apply: applications are always submitted manually outside the system.
+- No live collection unless `--live-collect` or source-specific `--live` is used.
+- No live Telegram send unless credentials are configured and `--live` is used.
+- No AI call unless AI is configured and the user explicitly requests
+  `--ai-polish` plus `--live-ai`.
+- The rule-based CV remains the authoritative source of truth.
+- AI artifacts are stored only as separate child artifacts after validation.
+- `.env`, `data/`, runtime databases, and generated private artifacts are not
+  committed.
+- Tests use fixtures and temporary databases; ordinary automated tests do not
+  call job sources, Telegram, Ollama, OpenAI-compatible providers, or MySQL.
+
+See [docs/SAFETY.md](docs/SAFETY.md) for the full safety model.
+
+## Screenshots
+
+Screenshot placeholders are intentionally empty until anonymized images are
+captured and reviewed for public sharing.
+
+- Dashboard overview: `docs/images/dashboard-overview-placeholder.png`
+- Jobs and ranking review: `docs/images/jobs-ranking-placeholder.png`
+- CV workflow page: `docs/images/cv-workflow-placeholder.png`
+- Application tracking page: `docs/images/application-tracking-placeholder.png`
 
 ## Setup
 
@@ -51,121 +130,22 @@ From the repository root in PowerShell:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
+python -m pip install -e ".[dashboard,test]"
+python -m app.db.migrations
 ```
 
-The exact direct runtime, test, and build dependencies are pinned in `pyproject.toml`.
-
-## Configuration
-
-The application starts safely without a `.env`. To customize local paths or policy:
+The application can run without a `.env`. To customize local paths or opt into
+integrations:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Relative paths are resolved from the repository root, not the shell’s current directory. Feature-specific credentials are validated only when that feature is enabled. Do not copy credentials from `existing_projects/`.
+Do not commit real `.env` values or copy credentials from legacy projects.
 
-## Initialize or upgrade the database
+## Daily Usage Commands
 
-```powershell
-python -m app.db.migrations
-```
-
-The default database is `data/job_hunt.sqlite3`. Re-running the command is safe; only unapplied migrations run.
-
-## Run tests
-
-```powershell
-python -m pytest
-```
-
-Tests use temporary SQLite databases and fixtures only. They do not call Arbeitsagentur, EnglishJobs, Telegram, OpenAI, Ollama, or MySQL.
-
-## Launch the local dashboard
-
-Install the optional dashboard dependency and launch from the repository root:
-
-```powershell
-python -m pip install -e ".[dashboard,test]"
-python -m app.dashboard
-```
-
-Opening the dashboard is passive and requires no integration credentials. See
-[the dashboard guide](docs/DASHBOARD.md) for pages, confirmation gates, caching,
-logical-vacancy behavior, and Windows launch details.
-
-## Arbeitsagentur fixture dry run
-
-Dry run is the safe default. It parses saved fixtures and reports inserts/updates without creating or changing a database:
-
-```powershell
-python -m app.cli collect arbeitsagentur --dry-run --query "Data Analyst"
-```
-
-Useful bounded overrides include `--location`, `--published-within-days`, `--max-pages`, and `--page-size`.
-
-Live HTTP and SQLite persistence require an explicit flag:
-
-```powershell
-python -m app.cli collect arbeitsagentur --live --query "Data Analyst" --max-pages 1
-```
-
-The ordinary test suite never enables live mode. See [the adapter guide](docs/ARBEITSAGENTUR_ADAPTER.md) before any live run.
-
-## EnglishJobs fixture dry run
-
-State mode dry run:
-
-```powershell
-python -m app.cli collect englishjobs --dry-run --state bayern
-```
-
-Keyword/location mode dry run:
-
-```powershell
-python -m app.cli collect englishjobs --dry-run --query "Data Analyst" --location Germany
-```
-
-Dry run uses saved HTML fixtures, resolves same-source identity, reports completeness and collection metrics, and does not create or modify the SQLite database.
-
-Live HTTP and SQLite persistence require an explicit flag:
-
-```powershell
-python -m app.cli collect englishjobs --live --state bayern --max-pages 1
-```
-
-The normal suite never enables this mode. Review [the adapter guide](docs/ENGLISHJOBS_ADAPTER.md) and [the security checklist](docs/SECURITY_CHECKLIST.md) before any live run.
-
-## Normalize and cluster stored jobs
-
-Milestone 4 commands are offline and operate only on SQLite:
-
-```powershell
-python -m app.cli deduplicate backfill
-python -m app.cli deduplicate review-list --status pending
-```
-
-See [the duplicate-clustering guide](docs/DUPLICATE_CLUSTERING.md) for review,
-split, version rollback, and company-alias configuration commands.
-
-## Analyze and rank stored jobs
-
-Milestone 5 commands are offline:
-
-```powershell
-python -m app.cli profile import profile.json --profile-key candidate
-python -m app.cli analyze --profile-id <profile-id>
-python -m app.cli rank --profile-id <profile-id>
-```
-
-Only full descriptions receive authoritative fit scores. See
-[the fit-analysis guide](docs/FIT_ANALYSIS.md) for profile schema, scoring,
-versioning, completeness policy, and deterministic ranking behavior.
-
-## Run the safe pipeline
-
-The pipeline orchestrates the existing workflow and writes a JSON summary:
+Run the safe local pipeline without live collection:
 
 ```powershell
 python -m app.cli pipeline run `
@@ -177,85 +157,106 @@ python -m app.cli pipeline run `
   --preview-notification
 ```
 
-Without `--live-collect`, no external job-source request is made. See
-[the pipeline guide](docs/PIPELINE.md) for live collection, output files, and
-daily workflow examples.
-
-## Track applications locally
-
-The Application Tracking CRM is local and manual. It never submits an
-application or sends a live message:
+Run a bounded live Arbeitsagentur collection:
 
 ```powershell
-python -m app.cli applications shortlist --profile-id <profile-id> --job-id <job-id> --priority high --note "Top ranked match"
-python -m app.cli applications list --profile-id <profile-id>
-python -m app.cli applications follow-up --profile-id <profile-id> --job-id <job-id> --date 2026-07-15
+python -m app.cli collect arbeitsagentur --live `
+  --query "Data Analyst" `
+  --location Deutschland `
+  --max-pages 1 `
+  --page-size 10
 ```
 
-See [the application tracking guide](docs/APPLICATION_TRACKING.md) for statuses,
-dashboard workflow, CV artifact linking, and daily review commands.
-
-## Preview Telegram top matches
-
-Preview is safe and offline:
+Open the local dashboard:
 
 ```powershell
-python -m app.cli notify telegram preview --profile-id <profile-id>
+python -m app.dashboard
 ```
 
-Actual delivery requires `TELEGRAM_ENABLED=true`, rotated credentials, and the
-explicit `--live` flag. See [the Telegram guide](docs/TELEGRAM_NOTIFICATIONS.md)
-for selection, chunking, retry, idempotency, and audit commands.
+Shortlist a job:
 
-## Generate truthful CV artifacts
+```powershell
+python -m app.cli applications shortlist `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --priority high `
+  --note "Strong fit"
+```
 
-Rule-based generation is offline and authoritative:
+Generate and inspect a FlowCV artifact:
 
 ```powershell
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
-python -m app.cli cv generate-manual --description-file <path> --profile-id <profile-id>
-python -m app.cli cv list --profile-id <profile-id>
-python -m app.cli cv list --job-id <job-id>
 python -m app.cli cv show --artifact-id <artifact-id> --text
 ```
 
-Stored jobs require a full description. Optional API-based AI polishing requires
-`AI_ENABLED=true`, `AI_PROVIDER=openai_compatible` or `ollama_cloud`, a
-user-provided `AI_API_KEY`, and both `--ai-polish` and `--live-ai`; failures
-retain the rule-based artifact. Use `AI_PROVIDER=ollama_cloud`,
-`AI_BASE_URL=https://ollama.com`, and `AI_MODEL=gpt-oss:20b` for native Ollama
-Cloud. See
-[the CV generation guide](docs/CV_GENERATION.md) for provenance, validation,
-cache identity, and artifact-security details. See
-[the CV workflow guide](docs/CV_WORKFLOW.md) for dashboard preview, copy, and
-application attachment steps.
-AI polish is conservative: `validation_failed` is expected and safe if a model
-changes facts, translates content, removes FlowCV sections, or adds unsupported
-claims. Safe polish mode restores locked fact-bearing sections from the
-rule-based artifact before storing any AI child artifact.
-
-## Import legacy local files
-
-Legacy import is dry-run-first and offline:
+Optionally polish with a configured AI provider:
 
 ```powershell
-python -m app.cli legacy inventory
-python -m app.cli legacy dry-run --source englishjobs-csv --path <path>
-python -m app.cli legacy backup
-python -m app.cli legacy apply --source englishjobs-csv --path <path> --backup-id <id>
-python -m app.cli legacy reconcile --batch-id <batch-id>
-python -m app.cli legacy verify <batch-id>
+python -m app.cli cv polish --artifact-id <rule-based-artifact-id> --live-ai
 ```
 
-Supported first sources are EnglishJobs scored CSVs, state-intelligence CSVs,
-`sent_jobs.json`, explicit `master_cv.json` profile import, selected TXT
-legacy artifacts, and fixture MySQL rows. Real MySQL access is optional and not
-required for tests. See [the legacy import guide](docs/LEGACY_IMPORT.md).
+Attach a reviewed CV artifact:
 
-## Application lifecycle
+```powershell
+python -m app.cli applications cv-ready `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --cv-artifact-id <artifact-id>
+```
 
-Supported states are `new`, `shortlisted`, `skipped`, `cv_ready`, `applied`, `interview`, `offer`, `rejected`, and `withdrawn`. Every accepted change appends an immutable event. Direct low-level `new -> applied` transitions remain rejected; CRM commands advance through required intermediate states when the user explicitly requests a later status.
+More demo commands are in [docs/DEMO.md](docs/DEMO.md).
 
-## Security
+## Test Results
 
-Before any live integration is enabled, complete [the security checklist](docs/SECURITY_CHECKLIST.md). The credentials found during the audit must be rotated externally; their values are not copied into the unified application or documentation.
+Latest verified baseline:
+
+- `python -m pytest` -> `272 passed, 2 skipped`
+- `python -m compileall app tests` -> passed
+- `git diff --check` -> passed
+- `git diff -- existing_projects` -> unchanged
+
+The skipped tests are optional live smoke tests for Arbeitsagentur and
+EnglishJobs. They require explicit environment opt-in and are not part of the
+ordinary offline verification path.
+
+## Documentation
+
+- [Demo guide](docs/DEMO.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Safety model](docs/SAFETY.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Pipeline](docs/PIPELINE.md)
+- [Dashboard](docs/DASHBOARD.md)
+- [CV generation](docs/CV_GENERATION.md)
+- [CV workflow](docs/CV_WORKFLOW.md)
+- [Application tracking](docs/APPLICATION_TRACKING.md)
+- [Legacy import](docs/LEGACY_IMPORT.md)
+
+## Current Limitations
+
+- No auto-apply or direct application submission.
+- No scheduler yet; daily runs are manual commands.
+- EnglishJobs full-description extraction remains conservative, so many records
+  may stay snippet-only.
+- FlowCV output is plain text; DOCX/PDF generation is outside the app.
+- Telegram live sending is implemented but intentionally disabled by default.
+- Real MySQL import is optional and not required for ordinary use or tests.
+- Dashboard is local and single-user; it is not a hosted multi-user web app.
+- Fit rules are deterministic and useful, but still benefit from calibration
+  against reviewed outcomes.
+
+## Future Roadmap
+
+- Improve EnglishJobs full-description extraction where legally and technically
+  safe.
+- Add a scheduler for local recurring pipeline runs.
+- Add stronger live Telegram safeguards and operator previews.
+- Add more safe job sources behind the same adapter contract.
+- Improve application analytics and follow-up reporting.
+- Package a final anonymized demo with screenshots and sample fixture data.
+
+## Legacy References
+
+The folders under `existing_projects/` are read-only reference implementations.
+The unified application does not import or modify them.
