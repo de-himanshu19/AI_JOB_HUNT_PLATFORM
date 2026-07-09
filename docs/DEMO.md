@@ -72,6 +72,31 @@ python -m app.cli pipeline run `
 Use this mode for demos where you want deterministic behavior and no network
 request.
 
+## Run Daily Wrapper Safely
+
+The daily command wraps the pipeline and writes a JSON run summary under
+`data/daily_runs/`:
+
+```powershell
+python -m app.cli daily run `
+  --profile-id <profile-id> `
+  --query "Data Analyst" `
+  --location Deutschland `
+  --source arbeitsagentur `
+  --max-pages 1 `
+  --page-size 10 `
+  --top-n 10 `
+  --preview-notification
+```
+
+Without `--live-collect`, this uses stored jobs only. For multiple configured
+searches, copy `config/daily_searches.example.json` to
+`config/daily_searches.local.json`, edit local IDs, and run:
+
+```powershell
+python -m app.cli daily run-config --config config/daily_searches.local.json
+```
+
 ## Run Live Arbeitsagentur Collection
 
 Live collection is explicit and bounded:

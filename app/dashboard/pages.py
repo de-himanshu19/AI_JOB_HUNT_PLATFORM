@@ -16,6 +16,7 @@ from app.dashboard.components import (
 )
 from app.dashboard.runtime import (
     cached_jobs,
+    cached_daily_runs,
     cached_overview,
     cached_runs,
     runtime,
@@ -859,6 +860,15 @@ def runs_page() -> None:
         st.dataframe(runs, use_container_width=True, hide_index=True)
     else:
         st.info("No collection runs are stored. Browsing this page never starts one.")
+    st.subheader("Daily Runs")
+    daily_runs = cached_daily_runs(
+        str(context.settings.repo_root / "data" / "daily_runs"),
+        20,
+    )
+    if daily_runs:
+        st.dataframe(daily_runs, use_container_width=True, hide_index=True)
+    else:
+        st.info("No daily-run summaries are stored. Browsing this page never starts one.")
     st.subheader("Database status")
     diagnostics = context.queries.diagnostics()
     a, b = st.columns(2)

@@ -185,6 +185,23 @@ External credential rotation remains a manual security gate. No credential value
 - Optional `--max-detail-requests` bounds detail fetching for collection demos
   and diagnostics.
 
+### Migration Milestone 16
+
+- Local `daily run` and `daily run-config` CLI commands wrap the existing
+  pipeline service without changing scoring, source adapters, CV generation,
+  AI polish, Telegram delivery, or application tracking behavior.
+- Daily run summaries are written as ignored JSON artifacts under
+  `data/daily_runs/` with run/search counts, per-search pipeline summaries,
+  errors, timestamps, and output paths.
+- A conservative lock file under `data/locks/daily_run.lock` prevents overlap
+  and requires manual stale-lock review.
+- `config/daily_searches.example.json` documents multiple local search
+  configurations; `config/daily_searches.local.json` is ignored for private IDs.
+- `scripts/run_daily_jobs.ps1` provides a Windows Task Scheduler entry point
+  and writes local logs under `data/logs/`.
+- Dashboard Runs & Diagnostics shows recent daily-run summaries passively; page
+  browsing never starts a run.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -224,6 +241,8 @@ No legacy module is imported, and no file under `existing_projects/` is modified
   `docs/ARCHITECTURE.md`, `docs/SAFETY.md`, and `docs/ROADMAP.md`.
 - Milestone 15: EnglishJobs detail extraction heuristics, bounded detail
   diagnostics, updated EnglishJobs tests/fixtures, and `docs/SOURCES.md`.
+- Milestone 16: daily-run service/CLI, example config, PowerShell wrapper,
+  scheduler docs, daily-run dashboard visibility, and focused tests.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

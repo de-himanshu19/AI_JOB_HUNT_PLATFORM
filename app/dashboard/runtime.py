@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -68,9 +69,40 @@ def cached_runs(database_path: str, busy_timeout_ms: int, limit: int):
     ).runs(limit)
 
 
+@st.cache_data(ttl=20, show_spinner=False)
+def cached_daily_runs(daily_runs_dir: str, limit: int):
+    directory = Path(daily_runs_dir)
+    if not directory.is_dir():
+        return ()
+    rows = []
+    for path in sorted(directory.glob("daily_*.json"), reverse=True)[: max(1, limit)]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        searches = payload.get("searches", [])
+        rows.append({
+            "status": payload.get("status"),
+            "started_at": payload.get("started_at"),
+            "finished_at": payload.get("finished_at"),
+            "searches": payload.get("total_searches", len(searches)),
+            "jobs_collected": sum(
+                int(item.get("jobs_collected", 0) or 0)
+                for item in searches if isinstance(item, dict)
+            ),
+            "top_jobs": sum(
+                int(item.get("top_jobs_count", 0) or 0)
+                for item in searches if isinstance(item, dict)
+            ),
+            "errors": len(payload.get("errors", [])),
+            "path": str(path),
+        })
+    return tuple(rows)
+
+
 def clear_read_caches() -> None:
     cached_profiles.clear()
     cached_overview.clear()
     cached_jobs.clear()
     cached_runs.clear()
-
+    cached_daily_runs.clear()

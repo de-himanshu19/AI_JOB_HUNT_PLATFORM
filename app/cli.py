@@ -24,6 +24,7 @@ from app.services.collection import CollectionService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION, CVGenerationService
 from app.services.analysis_rules import AnalysisRules
 from app.services.applications import ApplicationService
+from app.services.daily_run import DailyRunConfigError, DailyRunService, DailySearch
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
 from app.services.legacy_import import LegacyImportService
@@ -246,8 +247,37 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_run.add_argument("--live-collect", action="store_true")
     pipeline_run.add_argument("--preview-notification", action="store_true")
     pipeline_run.add_argument("--include-prefilter-only", action="store_true")
+    pipeline_run.add_argument("--max-detail-requests", type=int)
     pipeline_run.add_argument("--output", type=Path)
     pipeline_run.add_argument("--no-dashboard-hint", action="store_true")
+
+    daily = commands.add_parser(
+        "daily", help="Run safe local daily job-search workflows"
+    )
+    daily_commands = daily.add_subparsers(dest="daily_command", required=True)
+    daily_run = daily_commands.add_parser("run")
+    daily_run.add_argument("--profile-id", required=True)
+    daily_run.add_argument("--name", default="daily_cli_search")
+    daily_run.add_argument("--query", default="Data Analyst")
+    daily_run.add_argument("--location", default="Deutschland")
+    daily_run.add_argument(
+        "--source",
+        action="append",
+        help="Repeatable or comma-separated: arbeitsagentur, englishjobs",
+    )
+    daily_run.add_argument("--max-pages", type=int, default=1)
+    daily_run.add_argument("--page-size", type=int, default=10)
+    daily_run.add_argument("--top-n", type=int, default=10)
+    daily_run.add_argument("--live-collect", action="store_true")
+    daily_run.add_argument("--preview-notification", action="store_true")
+    daily_run.add_argument("--include-prefilter-only", action="store_true")
+    daily_run.add_argument("--max-detail-requests", type=int)
+    daily_run.add_argument("--output-dir", type=Path)
+    daily_run.add_argument("--lock-file", type=Path)
+    daily_config = daily_commands.add_parser("run-config")
+    daily_config.add_argument("--config", type=Path, required=True)
+    daily_config.add_argument("--output-dir", type=Path)
+    daily_config.add_argument("--lock-file", type=Path)
 
     applications = commands.add_parser(
         "applications", help="Track job applications locally"
@@ -1185,11 +1215,61 @@ def _pipeline(args: argparse.Namespace) -> int:
         live_collect=args.live_collect,
         preview_notification=args.preview_notification,
         include_prefilter_only=args.include_prefilter_only,
+        max_detail_requests=getattr(args, "max_detail_requests", None),
         output_path=args.output,
         dashboard_hint=not args.no_dashboard_hint,
     ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
+
+
+def _daily(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    rules = AnalysisRules.from_json(settings.fit_rules_path)
+    service = DailyRunService(
+        database,
+        settings,
+        rules,
+        aliases=CompanyAliases.from_json(settings.company_aliases_path),
+        output_dir=args.output_dir,
+        lock_path=args.lock_file,
+    )
+    try:
+        if args.daily_command == "run":
+            summary = service.run_one(_daily_search_from_args(args))
+        elif args.daily_command == "run-config":
+            summary = service.run_config_file(args.config)
+        else:
+            raise AssertionError("Unhandled daily command")
+    except DailyRunConfigError as error:
+        summary = {
+            "status": "failed",
+            "error_type": type(error).__name__,
+            "message": str(error),
+            "output_path": None,
+        }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if summary.get("status") == "completed" else 1
+
+
+def _daily_search_from_args(args: argparse.Namespace) -> DailySearch:
+    return DailySearch(
+        name=args.name,
+        profile_id=args.profile_id,
+        query=args.query,
+        location=args.location,
+        sources=_pipeline_sources(args.source),
+        max_pages=args.max_pages,
+        page_size=args.page_size,
+        top_n=args.top_n,
+        live_collect=args.live_collect,
+        preview_notification=args.preview_notification,
+        include_prefilter_only=args.include_prefilter_only,
+        max_detail_requests=args.max_detail_requests,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1218,6 +1298,8 @@ def main(argv: list[str] | None = None) -> int:
         return _legacy(args)
     if args.command == "pipeline":
         return _pipeline(args)
+    if args.command == "daily":
+        return _daily(args)
     if args.command == "applications":
         return _applications(args)
     raise AssertionError("Unhandled command")

@@ -60,11 +60,19 @@ not a commitment to implement future items automatically.
 - Collection and pipeline diagnostics include detail request and completeness
   counters.
 
+### M16: Local Scheduler / Daily Job Run
+
+- Safe `daily run` and `daily run-config` CLI workflows.
+- Local JSON run history under `data/daily_runs/`.
+- Conservative lock file under `data/locks/daily_run.lock`.
+- PowerShell wrapper for Windows Task Scheduler.
+- Passive dashboard visibility for recent daily runs.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
   permitted.
-- Add a local scheduler for recurring pipeline runs.
+- Improve scheduler observability and daily-run review.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the shared adapter contract.
 - Improve application analytics and follow-up reporting.

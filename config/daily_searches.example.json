@@ -1,0 +1,28 @@
+[
+  {
+    "name": "data_analyst_arbeitsagentur",
+    "profile_id": "543ca73e-7c5d-44af-96f8-d3b43b463284",
+    "query": "Data Analyst",
+    "location": "Deutschland",
+    "source": "arbeitsagentur",
+    "max_pages": 1,
+    "page_size": 10,
+    "top_n": 10,
+    "live_collect": true,
+    "preview_notification": true
+  },
+  {
+    "name": "data_analyst_englishjobs",
+    "profile_id": "543ca73e-7c5d-44af-96f8-d3b43b463284",
+    "query": "Data Analyst",
+    "location": "Germany",
+    "source": "englishjobs",
+    "max_pages": 1,
+    "page_size": 10,
+    "top_n": 10,
+    "live_collect": true,
+    "preview_notification": true,
+    "include_prefilter_only": true,
+    "max_detail_requests": 10
+  }
+]

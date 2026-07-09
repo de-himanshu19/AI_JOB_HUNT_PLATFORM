@@ -10,6 +10,10 @@ The pipeline reuses existing services. It does not add scoring rules, source
 parsers, live Telegram sending, AI polish, CV generation, auto-apply, deletion,
 application-status mutation, or dashboard rewrites.
 
+The daily-run command reuses this same pipeline service and adds only local run
+history, config-file iteration, and lock protection. It does not change pipeline
+business rules.
+
 ## Safe Dry Run
 
 Without `--live-collect`, the pipeline never contacts Arbeitsagentur or

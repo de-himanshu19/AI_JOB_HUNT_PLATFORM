@@ -42,6 +42,7 @@ class PipelineRunRequest:
     live_collect: bool = False
     preview_notification: bool = False
     include_prefilter_only: bool = False
+    max_detail_requests: int | None = None
     output_path: Path | None = None
     dashboard_hint: bool = True
 
@@ -127,6 +128,7 @@ class PipelineService:
                         location=request.location,
                         max_pages=request.max_pages,
                         page_size=request.page_size,
+                        max_detail_requests=request.max_detail_requests,
                     ),
                     source=source,
                     dry_run=False,

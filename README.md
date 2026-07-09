@@ -75,6 +75,7 @@ flowchart TD
 
 - One-command pipeline for collection, deduplication, analysis, ranking,
   notification preview, and JSON summaries.
+- Local daily-run wrapper for command-line or Windows Task Scheduler execution.
 - Arbeitsagentur and EnglishJobs collection behind source-neutral contracts.
 - Description completeness tracking: `full`, `snippet`, and `missing`.
 - SQLite persistence for jobs, descriptions, profiles, analyses, rankings,
@@ -173,6 +174,12 @@ Open the local dashboard:
 python -m app.dashboard
 ```
 
+Run the local daily wrapper:
+
+```powershell
+python -m app.cli daily run-config --config config/daily_searches.local.json
+```
+
 Shortlist a job:
 
 ```powershell
@@ -227,6 +234,7 @@ ordinary offline verification path.
 - [Safety model](docs/SAFETY.md)
 - [Job sources](docs/SOURCES.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Scheduler](docs/SCHEDULER.md)
 - [Pipeline](docs/PIPELINE.md)
 - [Dashboard](docs/DASHBOARD.md)
 - [CV generation](docs/CV_GENERATION.md)
@@ -237,7 +245,7 @@ ordinary offline verification path.
 ## Current Limitations
 
 - No auto-apply or direct application submission.
-- No scheduler yet; daily runs are manual commands.
+- Scheduler support is local-only through CLI/PowerShell/Windows Task Scheduler.
 - EnglishJobs full-description extraction remains conservative, so many records
   may stay snippet-only.
 - FlowCV output is plain text; DOCX/PDF generation is outside the app.
@@ -251,7 +259,7 @@ ordinary offline verification path.
 
 - Continue improving EnglishJobs full-description extraction where legally and
   technically safe.
-- Add a scheduler for local recurring pipeline runs.
+- Improve scheduler observability and run-history review.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the same adapter contract.
 - Improve application analytics and follow-up reporting.

@@ -27,6 +27,9 @@ data/*.sqlite3
 data/*.sqlite3-*
 data/artifacts/
 data/pipeline_runs/
+data/daily_runs/
+data/locks/
+data/logs/
 logs/
 *.db
 *.sqlite
@@ -35,6 +38,9 @@ logs/
 outputs/
 reports/
 exports/
+
+# Local scheduler/search configuration
+config/daily_searches.local.json
 
 # Editors and operating systems
 .vscode/
