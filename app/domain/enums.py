@@ -23,6 +23,8 @@ class ApplicationStatus(StrEnum):
     SKIPPED = "skipped"
     REJECTED = "rejected"
     INTERVIEW = "interview"
+    OFFER = "offer"
+    WITHDRAWN = "withdrawn"
 
 
 class CollectionRunStatus(StrEnum):

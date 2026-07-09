@@ -1,6 +1,6 @@
 # Implementation Status
 
-Status date: 2026-07-08
+Status date: 2026-07-09
 
 ## Completed
 
@@ -119,6 +119,23 @@ External credential rotation remains a manual security gate. No credential value
 - Candidate profile import remains explicit and versioned.
 - MySQL support is fixture-first through an injectable reader boundary; `LEGACY_MYSQL_ENABLED=false` by default and no real credentials or driver are required.
 
+### Migration Milestone 10
+
+- Safe one-command local pipeline orchestration reusing collection, deduplication, analysis, ranking, and notification-preview services.
+- Dry-run behavior uses stored jobs only and makes no external source requests unless `--live-collect` is explicitly supplied.
+- Pipeline JSON summaries include collection/completeness metrics, analysis/ranking counts, notification-preview metadata, top jobs, output path, and suggested next actions.
+- Pipeline does not generate CVs, send Telegram messages, submit applications, mutate application statuses, alter scoring, or rewrite dashboard behavior.
+
+### Migration Milestone 11
+
+- Additive migration 008 extends application tracking with logical cluster identity, current status alias, priority, notes, follow-up date, CV artifact link, source, indexes, and cluster-aware uniqueness.
+- Corrective migration 009 keeps `logical_cluster_id` as non-blocking text metadata so deduplication rebuilds can clear and recreate duplicate clusters without deleting or blocking application tracking rows.
+- Application events remain immutable and now include event type and note metadata while preserving existing status history.
+- Local CRM service and CLI commands support shortlist, skip, set-status, cv-ready, follow-up, list, due, and history workflows.
+- Pipeline top jobs show existing application status and suggest explicit shortlist commands without mutating tracking data.
+- CV generation can opt in to `--mark-cv-ready`; without that flag it still has no application-status side effect.
+- Dashboard Applications page shows CRM counts, due follow-ups, score context, notes preview, and confirmation-gated actions.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -150,6 +167,8 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 7: generic CV builder/validators/storage, optional Ollama provider boundary, CV generation service, `migrations/006_cv_generation.sql`, focused tests, and `docs/CV_GENERATION.md`.
 - Milestone 8: `app/dashboard`, optional Streamlit extra/launcher, dashboard tests, `.streamlit/config.toml`, and `docs/DASHBOARD.md`.
 - Milestone 9: `app/domain/legacy_import.py`, `app/services/legacy_import.py`, `migrations/007_legacy_import.sql`, legacy import CLI commands, focused tests, and `docs/LEGACY_IMPORT.md`.
+- Milestone 10: `app/services/pipeline.py`, pipeline CLI command, pipeline tests, and `docs/PIPELINE.md`.
+- Milestone 11: application tracking migration/service/repository/CLI/dashboard extensions, focused CRM tests, and `docs/APPLICATION_TRACKING.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -171,7 +190,7 @@ python -m pytest
 ## Verification result
 
 - Dependency installation from `pyproject.toml`: passed.
-- Fixture-only pytest suite: **225 passed, 2 explicitly disabled live smoke tests skipped** at the Milestone 9 verification point.
+- Fixture-only pytest suite: updated by later milestone verification runs; live smoke tests remain explicitly disabled unless opted in.
 - Fresh database creation and repeat migration: passed.
 - Runtime import/startup without integration credentials: passed.
 - Static syntax scan: passed.

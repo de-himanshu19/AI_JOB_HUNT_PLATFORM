@@ -11,7 +11,7 @@ from app.domain.analysis import (
     ScoreCap,
     ScoreComponent,
 )
-from app.domain.application import Application, ApplicationEvent
+from app.domain.application import Application, ApplicationEvent, ApplicationPriority
 from app.domain.candidate import CandidateEvidenceProfile, CandidateProfile
 from app.domain.cv import (
     AIAttemptStatus,
@@ -51,6 +51,7 @@ from app.domain.operations import (
 __all__ = [
     "Application",
     "ApplicationEvent",
+    "ApplicationPriority",
     "ApplicationStatus",
     "AnalysisAuthority",
     "ArtifactFormat",

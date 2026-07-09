@@ -375,7 +375,46 @@ class DashboardQueryService:
         where = " AND ".join(clauses) if clauses else "1 = 1"
         with self.database.read_connection() as connection:
             rows = connection.execute(
-                f"""SELECT a.*, j.title_raw, j.company_raw, j.location_raw, j.source
+                f"""SELECT
+                    a.id, a.job_id, a.profile_id, a.logical_cluster_id,
+                    a.status, a.current_status, a.priority, a.notes,
+                    CASE
+                        WHEN length(a.notes) > 120 THEN substr(a.notes, 1, 117) || '...'
+                        ELSE a.notes
+                    END AS notes_preview,
+                    a.follow_up_date, a.cv_artifact_id, a.source AS application_source,
+                    a.created_at, a.updated_at,
+                    j.title_raw, j.company_raw, j.location_raw, j.source,
+                    (
+                        SELECT jr.rank_score FROM job_rankings jr
+                        WHERE jr.profile_id = a.profile_id
+                          AND (
+                            jr.job_id = a.job_id OR
+                            (a.logical_cluster_id IS NOT NULL
+                             AND jr.cluster_id = a.logical_cluster_id)
+                          )
+                        ORDER BY jr.created_at DESC, jr.id DESC
+                        LIMIT 1
+                    ) AS rank_score,
+                    COALESCE((
+                        SELECT ja.fit_score FROM job_analyses ja
+                        WHERE ja.profile_id = a.profile_id
+                          AND ja.job_id = a.job_id
+                        ORDER BY ja.created_at DESC, ja.id DESC
+                        LIMIT 1
+                    ), (
+                        SELECT ja.fit_score
+                        FROM job_rankings jr
+                        JOIN job_analyses ja ON ja.id = jr.analysis_id
+                        WHERE jr.profile_id = a.profile_id
+                          AND (
+                            jr.job_id = a.job_id OR
+                            (a.logical_cluster_id IS NOT NULL
+                             AND jr.cluster_id = a.logical_cluster_id)
+                          )
+                        ORDER BY jr.created_at DESC, jr.id DESC
+                        LIMIT 1
+                    )) AS fit_score
                 FROM applications a JOIN jobs j ON j.id = a.job_id
                 WHERE {where} ORDER BY a.updated_at DESC, a.id""", parameters,
             ).fetchall()
