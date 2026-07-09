@@ -41,6 +41,7 @@ flowchart LR
     Ranking --> Dashboard["Streamlit dashboard"]
     Ranking --> Notify["Telegram preview"]
     Ranking --> CV["Rule-based CV generation"]
+    Dashboard --> Analytics["Application analytics"]
     Dashboard --> Tracking["Application tracking"]
     CV --> Tracking
     CV --> AI["Optional safe AI polish"]
@@ -84,9 +85,11 @@ flowchart TD
 - Deterministic fit analysis and logical-vacancy ranking.
 - Offline Telegram preview and opt-in live delivery workflow.
 - Local Streamlit dashboard for review, duplicate decisions, applications,
-  CV workflow, notifications, and run diagnostics.
+  application analytics, CV workflow, notifications, and run diagnostics.
 - Application Tracking CRM with shortlist, status, priority, notes, follow-up
   dates, CV artifact links, and immutable history.
+- Read-only application analytics for funnel progress, source quality,
+  follow-ups, daily-run activity, and recent job-search movement.
 - Rule-based FlowCV text generation with private evidence reports.
 - Safe API-based AI CV polish using OpenAI-compatible or native Ollama Cloud
   providers.
@@ -122,6 +125,7 @@ captured and reviewed for public sharing.
 - Jobs and ranking review: `docs/images/jobs-ranking-placeholder.png`
 - CV workflow page: `docs/images/cv-workflow-placeholder.png`
 - Application tracking page: `docs/images/application-tracking-placeholder.png`
+- Application analytics page: `docs/images/application-analytics-placeholder.png`
 
 ## Setup
 
@@ -176,6 +180,12 @@ Open the local dashboard:
 
 ```powershell
 python -m app.dashboard
+```
+
+Review application analytics from the CLI:
+
+```powershell
+python -m app.cli analytics summary --profile-id <profile-id>
 ```
 
 Run the local daily wrapper:
@@ -270,7 +280,8 @@ ordinary offline verification path.
 - Improve scheduler observability and run-history review.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the same adapter contract.
-- Improve application analytics and follow-up reporting.
+- Improve application analytics calibration with reviewed outcomes and longer
+  trend windows.
 - Package a final anonymized demo with screenshots and sample fixture data.
 
 ## Legacy References

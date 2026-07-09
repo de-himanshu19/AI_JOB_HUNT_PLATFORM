@@ -15,6 +15,7 @@ from app.dashboard.components import (
     table_rows,
 )
 from app.dashboard.runtime import (
+    cached_application_analytics,
     cached_jobs,
     cached_daily_runs,
     cached_overview,
@@ -82,6 +83,137 @@ def overview_page() -> None:
             )
         else:
             st.info("No notification batches. Preview remains an explicit offline action.")
+
+
+def analytics_page() -> None:
+    context = runtime()
+    profile_id = _profile_id()
+    page_header(
+        "Applications Analytics",
+        "Read-only funnel, source quality, follow-up, and daily activity signals for the job search.",
+        eyebrow="Progress dashboard",
+    )
+    summary = cached_application_analytics(
+        str(context.database.path),
+        context.database.busy_timeout_ms,
+        profile_id or "",
+        str(context.settings.repo_root / "data" / "daily_runs"),
+    )
+    metrics = summary["metrics"]
+    top = st.columns(6)
+    for column, (label, key) in zip(
+        top,
+        (
+            ("Jobs stored", "total_jobs_stored"),
+            ("Logical vacancies", "total_logical_vacancies"),
+            ("CV-ready", "cv_ready_count"),
+            ("Applied", "applied_count"),
+            ("Interview", "interview_count"),
+            ("Rejected", "rejected_count"),
+        ),
+    ):
+        column.metric(label, metrics[key])
+    follow = st.columns(4)
+    for column, (label, key) in zip(
+        follow,
+        (
+            ("Due follow-ups", "due_followups"),
+            ("Overdue follow-ups", "overdue_followups"),
+            ("Jobs seen 7d", "jobs_collected_last_7_days"),
+            ("Applications 7d", "applications_created_last_7_days"),
+        ),
+    ):
+        column.metric(label, metrics[key])
+
+    funnel_tab, source_tab, follow_tab, daily_tab = st.tabs(
+        ["Funnel", "Source Quality", "Follow-ups", "Daily Runs"]
+    )
+    with funnel_tab:
+        st.subheader("Application funnel")
+        funnel = list(summary["funnel"])
+        if funnel:
+            st.bar_chart(funnel, x="stage", y="count")
+            st.dataframe(funnel, use_container_width=True, hide_index=True)
+        else:
+            st.info("No funnel data yet.")
+        st.subheader("Applications by status")
+        status_rows = [
+            {"status": key, "count": value}
+            for key, value in summary["applications_by_status"].items()
+        ]
+        if status_rows:
+            st.bar_chart(status_rows, x="status", y="count")
+            st.dataframe(status_rows, use_container_width=True, hide_index=True)
+        st.subheader("Applications by priority")
+        priority_rows = [
+            {"priority": key, "count": value}
+            for key, value in summary["applications_by_priority"].items()
+        ]
+        if priority_rows:
+            st.dataframe(priority_rows, use_container_width=True, hide_index=True)
+
+    with source_tab:
+        st.subheader("Jobs by source")
+        source_rows = [
+            {"source": key, "jobs": value}
+            for key, value in summary["jobs_by_source"].items()
+        ]
+        if source_rows:
+            st.bar_chart(source_rows, x="source", y="jobs")
+            st.dataframe(source_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No jobs are stored yet.")
+        st.subheader("Description completeness by source")
+        completeness = list(summary["description_completeness_by_source"])
+        if completeness:
+            st.dataframe(completeness, use_container_width=True, hide_index=True)
+        st.subheader("Source quality")
+        quality = list(summary["source_quality"])
+        if quality:
+            st.dataframe(quality, use_container_width=True, hide_index=True)
+
+    with follow_tab:
+        st.subheader("Follow-ups due now")
+        due = list(summary["followups"]["due"])
+        if due:
+            st.dataframe(due, use_container_width=True, hide_index=True)
+        else:
+            st.info("No follow-ups are due today.")
+        st.subheader("Overdue follow-ups")
+        overdue = list(summary["followups"]["overdue"])
+        if overdue:
+            st.dataframe(overdue, use_container_width=True, hide_index=True)
+        else:
+            st.info("No overdue follow-ups.")
+        st.subheader("Next 7 days")
+        upcoming = list(summary["followups"]["next_7_days"])
+        if upcoming:
+            st.dataframe(upcoming, use_container_width=True, hide_index=True)
+        else:
+            st.info("No follow-ups scheduled for the next 7 days.")
+
+    with daily_tab:
+        daily = summary["daily_runs"]
+        st.subheader("Latest daily run")
+        if daily["latest"]:
+            st.json(daily["latest"])
+        else:
+            st.info("No saved daily-run summaries found under data/daily_runs.")
+        columns = st.columns(5)
+        for column, (label, key) in zip(
+            columns,
+            (
+                ("Searches", "total_searches"),
+                ("Succeeded", "successful_searches"),
+                ("Failed", "failed_searches"),
+                ("Jobs collected", "jobs_collected"),
+                ("Errors", "errors"),
+            ),
+        ):
+            column.metric(label, daily[key])
+        rows = list(daily["last_7"])
+        if rows:
+            st.dataframe(rows, use_container_width=True, hide_index=True)
 
 
 def jobs_page() -> None:

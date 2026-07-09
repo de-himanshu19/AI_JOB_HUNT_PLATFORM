@@ -15,6 +15,7 @@ from streamlit.testing.v1 import AppTest
 
 from app.config import _reset_settings_cache_for_tests, settings_from_mapping
 from app.dashboard.pages import (
+    analytics_page,
     applications_page,
     cv_builder_page,
     duplicate_review_page,
@@ -141,7 +142,7 @@ def test_startup_and_browsing_make_no_external_request(monkeypatch, tmp_path) ->
     app = _run(monkeypatch, tmp_path)
     assert not app.exception
     for page in (
-        overview_page, jobs_page, job_detail_page, duplicate_review_page,
+        overview_page, analytics_page, jobs_page, job_detail_page, duplicate_review_page,
         applications_page, cv_builder_page, notifications_page, runs_page,
     ):
         page_app = AppTest.from_string(

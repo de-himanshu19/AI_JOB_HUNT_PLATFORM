@@ -4,6 +4,7 @@ import streamlit as st
 
 from app.dashboard.components import profile_picker
 from app.dashboard.pages import (
+    analytics_page,
     applications_page,
     cv_builder_page,
     duplicate_review_page,
@@ -30,6 +31,11 @@ def main() -> None:
     pages = {
         "Review": [
             st.Page(overview_page, title="Overview", url_path="overview", default=True),
+            st.Page(
+                analytics_page,
+                title="Applications Analytics",
+                url_path="applications-analytics",
+            ),
             st.Page(jobs_page, title="Jobs", url_path="jobs"),
             st.Page(job_detail_page, title="Job Detail", url_path="job-detail"),
             st.Page(duplicate_review_page, title="Duplicate Review", url_path="duplicates"),

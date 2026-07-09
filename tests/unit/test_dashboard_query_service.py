@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+import app.cli as cli
+from app.config import settings_from_mapping
 from app.dashboard.query_service import DashboardQueryService
 from app.dashboard.view_models import JobFilters
 from app.db.connection import Database
@@ -11,6 +13,10 @@ from app.db.repositories import CandidateProfileRepository, JobDescriptionReposi
 from app.domain.enums import DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
 from app.services.analysis_rules import AnalysisRules
+from app.services.analytics import (
+    ApplicationAnalyticsService,
+    read_daily_run_summaries,
+)
 from app.services.applications import ApplicationService
 from app.services.deduplication import DeduplicationService
 from app.services.ranking import RankingService
@@ -62,6 +68,44 @@ def _seed_logical_vacancy(database: Database):
     return profile, jobs
 
 
+def _add_job(
+    database: Database,
+    *,
+    source: JobSource,
+    source_id: str,
+    title: str = "Data Analyst",
+    company: str = "Another GmbH",
+    completeness: DescriptionCompleteness = DescriptionCompleteness.FULL,
+) -> Job:
+    text = "SQL reporting validation stakeholder dashboards " * 30
+    job = Job(
+        source=source,
+        source_job_id=source_id,
+        source_url=f"https://example.invalid/{source_id}",
+        canonical_url=f"https://example.invalid/{source_id}",
+        title_raw=title,
+        title_normalized=title.casefold(),
+        company_raw=company,
+        company_normalized=company.casefold(),
+        location_raw="Berlin",
+        city="berlin",
+        country="germany",
+        language_detected="en",
+        first_seen_at=datetime(2026, 7, 9, tzinfo=UTC),
+        last_seen_at=datetime(2026, 7, 9, tzinfo=UTC),
+    )
+    with database.transaction() as connection:
+        JobRepository(connection).create(job)
+        JobDescriptionRepository(connection).create(JobDescription(
+            job_id=job.id,
+            raw_text=text if completeness is not DescriptionCompleteness.MISSING else "",
+            normalized_text=text if completeness is not DescriptionCompleteness.MISSING else "",
+            completeness=completeness,
+            content_hash=source_id.replace("-", "")[:64].ljust(64, "0"),
+        ))
+    return job
+
+
 def test_empty_dashboard_queries_return_useful_empty_views(database: Database) -> None:
     service = DashboardQueryService(database)
     overview = service.overview()
@@ -75,6 +119,12 @@ def test_empty_dashboard_queries_return_useful_empty_views(database: Database) -
     assert service.profiles() == ()
     assert service.runs() == ()
     assert service.diagnostics()["foreign_key_issues"] == 0
+    analytics = service.application_analytics(daily_runs_dir=database.path.parent)
+    assert analytics["metrics"]["total_jobs_stored"] == 0
+    assert analytics["metrics"]["total_logical_vacancies"] == 0
+    assert analytics["metrics"]["due_followups"] == 0
+    assert analytics["applications_by_status"]["applied"] == 0
+    assert analytics["daily_runs"]["latest"] is None
 
 
 def test_jobs_default_to_logical_vacancies_and_filters_compose(database: Database) -> None:
@@ -133,6 +183,116 @@ def test_applications_query_includes_crm_and_score_context(database: Database) -
     assert rows[0]["rank_score"] is not None
     assert rows[0]["fit_score"] is not None
     assert rows[0]["notes_preview"] == "Dashboard follow-up"
+
+
+def test_application_analytics_counts_statuses_sources_and_followups(
+    database: Database,
+) -> None:
+    profile, jobs = _seed_logical_vacancy(database)
+    extra = _add_job(
+        database,
+        source=JobSource.ENGLISHJOBS,
+        source_id="analytics-ej-snippet",
+        company="Different GmbH",
+        completeness=DescriptionCompleteness.SNIPPET,
+    )
+    service = ApplicationService(database)
+    service.mark_cv_ready(profile.id, jobs[0].id, note="FlowCV ready")
+    service.mark_applied(profile.id, extra.id, note="Applied manually")
+    service.set_follow_up(
+        profile_id=profile.id,
+        job_id=extra.id,
+        follow_up_date=date(2026, 7, 9),
+        note="Ask recruiter for update",
+    )
+
+    summary = ApplicationAnalyticsService(
+        database, today=date(2026, 7, 10)
+    ).summary(profile.id)
+
+    assert summary["metrics"]["total_jobs_stored"] == 3
+    assert summary["jobs_by_source"]["arbeitsagentur"] == 1
+    assert summary["jobs_by_source"]["englishjobs"] == 2
+    assert summary["applications_by_status"]["cv_ready"] == 1
+    assert summary["applications_by_status"]["applied"] == 1
+    assert summary["metrics"]["cv_ready_count"] == 1
+    assert summary["metrics"]["applied_count"] == 1
+    assert summary["metrics"]["overdue_followups"] == 1
+    assert summary["followups"]["overdue"][0]["last_note"].endswith(
+        "Ask recruiter for update"
+    )
+    englishjobs = next(
+        row for row in summary["source_quality"] if row["source"] == "englishjobs"
+    )
+    assert englishjobs["snippet_descriptions"] == 1
+    assert englishjobs["applications"] == 1
+    assert englishjobs["applied"] == 1
+
+
+def test_daily_run_summary_reader_skips_malformed_files(tmp_path: Path) -> None:
+    (tmp_path / "daily_bad.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "daily_ok.json").write_text(
+        json.dumps({
+            "status": "completed",
+            "started_at": "2026-07-10T08:00:00+00:00",
+            "finished_at": "2026-07-10T08:05:00+00:00",
+            "total_searches": 2,
+            "successful_searches": 1,
+            "failed_searches": 1,
+            "errors": [{"message": "fixture failure"}],
+            "searches": [
+                {
+                    "jobs_collected": 3,
+                    "top_jobs_count": 2,
+                    "pipeline_summary": {"ranking_scope": "current-run"},
+                },
+                {"status": "failed", "jobs_collected": 0, "top_jobs_count": 0},
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    rows = read_daily_run_summaries(tmp_path, limit=7)
+
+    assert len(rows) == 1
+    assert rows[0]["searches"] == 2
+    assert rows[0]["failed_searches"] == 1
+    assert rows[0]["jobs_collected"] == 3
+    assert rows[0]["top_jobs"] == 2
+    assert rows[0]["ranking_scope"] == "current-run"
+
+
+def test_analytics_cli_summary_returns_json(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    settings = settings_from_mapping(
+        {"JOBHUNT_DATABASE_PATH": "analytics.sqlite3"},
+        root=tmp_path,
+    )
+    database = Database.from_settings(settings)
+    from app.db.migrations import migrate
+
+    migrate(database)
+    profile, jobs = _seed_logical_vacancy(database)
+    ApplicationService(database).shortlist_job(profile.id, jobs[0].id, priority="high")
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+    result = cli.main([
+        "analytics",
+        "summary",
+        "--profile-id",
+        str(profile.id),
+        "--daily-runs-dir",
+        str(tmp_path / "daily runs with spaces"),
+    ])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert result == 0
+    assert payload["profile_id"] == str(profile.id)
+    assert payload["applications_by_status"]["shortlisted"] == 1
+    assert payload["daily_runs"]["latest"] is None
 
 
 def test_cv_artifact_queries_read_text_and_handle_missing_files(

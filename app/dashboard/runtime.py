@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 
 import streamlit as st
@@ -14,6 +13,7 @@ from app.dashboard.query_service import DashboardQueryService
 from app.dashboard.view_models import JobFilters
 from app.db.connection import Database
 from app.db.migrations import migrate
+from app.services.analytics import read_daily_run_summaries
 
 
 @dataclass(frozen=True)
@@ -71,40 +71,22 @@ def cached_runs(database_path: str, busy_timeout_ms: int, limit: int):
 
 @st.cache_data(ttl=20, show_spinner=False)
 def cached_daily_runs(daily_runs_dir: str, limit: int):
-    directory = Path(daily_runs_dir)
-    if not directory.is_dir():
-        return ()
-    rows = []
-    for path in sorted(directory.glob("daily_*.json"), reverse=True)[: max(1, limit)]:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        searches = payload.get("searches", [])
-        scopes = [
-            item.get("pipeline_summary", {}).get("ranking_scope")
-            for item in searches if isinstance(item, dict)
-        ]
-        rows.append({
-            "status": payload.get("status"),
-            "started_at": payload.get("started_at"),
-            "finished_at": payload.get("finished_at"),
-            "ranking_scope": ", ".join(
-                dict.fromkeys(str(scope) for scope in scopes if scope)
-            ),
-            "searches": payload.get("total_searches", len(searches)),
-            "jobs_collected": sum(
-                int(item.get("jobs_collected", 0) or 0)
-                for item in searches if isinstance(item, dict)
-            ),
-            "top_jobs": sum(
-                int(item.get("top_jobs_count", 0) or 0)
-                for item in searches if isinstance(item, dict)
-            ),
-            "errors": len(payload.get("errors", [])),
-            "path": str(path),
-        })
-    return tuple(rows)
+    return read_daily_run_summaries(daily_runs_dir, limit=limit)
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def cached_application_analytics(
+    database_path: str,
+    busy_timeout_ms: int,
+    profile_id: str,
+    daily_runs_dir: str,
+):
+    return DashboardQueryService(
+        Database(Path(database_path), busy_timeout_ms)
+    ).application_analytics(
+        profile_id or None,
+        daily_runs_dir=daily_runs_dir,
+    )
 
 
 def clear_read_caches() -> None:
@@ -113,3 +95,4 @@ def clear_read_caches() -> None:
     cached_jobs.clear()
     cached_runs.clear()
     cached_daily_runs.clear()
+    cached_application_analytics.clear()

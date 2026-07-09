@@ -17,6 +17,8 @@ flowchart LR
     Dedup --> Analysis["Fit analysis"]
     Analysis --> Ranking["Ranking"]
     Ranking --> Dashboard["Dashboard"]
+    DB --> Analytics["Application analytics"]
+    Analytics --> Dashboard
     Ranking --> Notify["Notification preview"]
     Ranking --> CV["CV generation"]
     CV --> Validator["Validation layer"]
@@ -49,6 +51,9 @@ Services contain business workflows and keep page/command code thin:
 - Pipeline service composes collection, deduplication, analysis, ranking, and
   notification preview.
 - Application service owns CRM transitions and immutable event history.
+- Application analytics service reads existing jobs, descriptions, clusters,
+  applications, follow-ups, and daily-run JSON summaries for passive progress
+  reporting.
 - CV generation service creates rule-based artifacts and optional validated AI
   derivatives.
 - Legacy import service handles backup, dry-run, apply, verify, and reconcile.
@@ -83,6 +88,11 @@ instead of duplicating business rules in page files. Opening a page is passive:
 it does not collect jobs, send messages, call AI, generate CVs, approve
 duplicates, mutate application state, or open external vacancy links without
 explicit action.
+
+The Applications Analytics page is read-only. It shows job inventory,
+description completeness, application funnel counts, source quality,
+follow-ups, and saved daily-run summaries without starting live runs or writing
+CRM changes.
 
 ## AI Provider Abstraction
 

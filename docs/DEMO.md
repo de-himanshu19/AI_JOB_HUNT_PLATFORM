@@ -122,6 +122,20 @@ Opening the dashboard is passive. It must not collect jobs, send Telegram
 messages, call AI providers, generate CVs, change application status, approve
 duplicates, or open external vacancy links without explicit user action.
 
+The `Applications Analytics` page is also passive. It reads existing jobs,
+description completeness, applications, follow-up dates, and saved daily-run
+JSON summaries to show funnel progress and source quality.
+
+## Review Analytics From CLI
+
+```powershell
+python -m app.cli analytics summary --profile-id <profile-id>
+```
+
+This command prints JSON for funnel counts, source quality, due/overdue
+follow-ups, recent activity, and saved daily-run summaries. It does not trigger
+live collection, AI polish, Telegram delivery, or application status changes.
+
 ## Shortlist A Job
 
 ```powershell

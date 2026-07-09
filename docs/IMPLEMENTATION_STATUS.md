@@ -1,6 +1,6 @@
 # Implementation Status
 
-Status date: 2026-07-09
+Status date: 2026-07-10
 
 ## Completed
 
@@ -220,6 +220,20 @@ External credential rotation remains a manual security gate. No credential value
 - Dashboard daily-run summaries display ranking scope passively and never start
   a run.
 
+### Migration Milestone 18
+
+- Read-only application analytics service shared by CLI and dashboard.
+- Dashboard Applications Analytics page shows job inventory, logical vacancies,
+  description completeness, application funnel counts, source quality,
+  follow-up tables, recent activity, and saved daily-run summaries.
+- CLI `analytics summary --profile-id <id>` emits JSON for the same funnel,
+  source, follow-up, recent activity, and daily-run metrics.
+- Daily-run JSON parsing skips missing or malformed files safely and never
+  starts live runs from dashboard browsing.
+- No schema migration, scoring change, source-adapter change, CV/AI change,
+  Telegram behavior change, application write-behavior change, or
+  `existing_projects/` modification was required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -263,6 +277,9 @@ No legacy module is imported, and no file under `existing_projects/` is modified
   scheduler docs, daily-run dashboard visibility, and focused tests.
 - Milestone 17: pipeline ranking-scope support, current-run daily defaults,
   scoped notification preview, dashboard scope visibility, and focused tests.
+- Milestone 18: read-only analytics service, CLI summary command, dashboard
+  Applications Analytics page, safe daily-run summary parsing, focused tests,
+  and docs.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

@@ -23,6 +23,7 @@ from app.logging_config import configure_logging
 from app.services.collection import CollectionService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION, CVGenerationService
 from app.services.analysis_rules import AnalysisRules
+from app.services.analytics import ApplicationAnalyticsService
 from app.services.applications import ApplicationService
 from app.services.daily_run import DailyRunConfigError, DailyRunService, DailySearch
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
@@ -288,6 +289,16 @@ def build_parser() -> argparse.ArgumentParser:
     daily_config.add_argument("--config", type=Path, required=True)
     daily_config.add_argument("--output-dir", type=Path)
     daily_config.add_argument("--lock-file", type=Path)
+
+    analytics = commands.add_parser(
+        "analytics", help="Read-only application and job-search analytics"
+    )
+    analytics_commands = analytics.add_subparsers(
+        dest="analytics_command", required=True
+    )
+    analytics_summary = analytics_commands.add_parser("summary")
+    analytics_summary.add_argument("--profile-id", required=True)
+    analytics_summary.add_argument("--daily-runs-dir", type=Path)
 
     applications = commands.add_parser(
         "applications", help="Track job applications locally"
@@ -1103,6 +1114,22 @@ def _applications(args: argparse.Namespace) -> int:
     return 0
 
 
+def _analytics(args: argparse.Namespace) -> int:
+    if args.analytics_command != "summary":
+        raise AssertionError("Unhandled analytics command")
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    daily_runs_dir = args.daily_runs_dir or settings.repo_root / "data" / "daily_runs"
+    output = ApplicationAnalyticsService(
+        database,
+        daily_runs_dir=daily_runs_dir,
+    ).summary(args.profile_id)
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _legacy_plan_json(plan: LegacyImportPlan) -> dict[str, object]:
     return {
         "source_type": plan.source_type.value,
@@ -1312,6 +1339,8 @@ def main(argv: list[str] | None = None) -> int:
         return _pipeline(args)
     if args.command == "daily":
         return _daily(args)
+    if args.command == "analytics":
+        return _analytics(args)
     if args.command == "applications":
         return _applications(args)
     raise AssertionError("Unhandled command")

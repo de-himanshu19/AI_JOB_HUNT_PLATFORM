@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.db.connection import Database
 from app.db.repositories import CandidateProfileRepository
+from app.services.analytics import ApplicationAnalyticsService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION
 from app.services.deduplication import DEDUPLICATION_VERSION
 from app.dashboard.view_models import (
@@ -583,6 +584,17 @@ class DashboardQueryService:
             "migrations": tuple(dict(row) for row in migrations),
             "counts": counts, "foreign_key_issues": len(integrity),
         }
+
+    def application_analytics(
+        self,
+        profile_id: UUID | str | None = None,
+        *,
+        daily_runs_dir: Path | str | None = None,
+    ) -> dict[str, object]:
+        return ApplicationAnalyticsService(
+            self.database,
+            daily_runs_dir=daily_runs_dir,
+        ).summary(profile_id)
 
     @staticmethod
     def _decode_description(value):

@@ -77,6 +77,14 @@ not a commitment to implement future items automatically.
 - Current-run notification preview uses scoped rankings, including EnglishJobs
   `prefilter_only` discovery jobs when explicitly allowed.
 
+### M18: Application Analytics Dashboard
+
+- Read-only Streamlit Applications Analytics page.
+- Funnel, source quality, follow-up, and recent activity metrics from existing
+  database records.
+- Passive daily-run analytics from saved `data/daily_runs` JSON summaries.
+- CLI JSON summary via `python -m app.cli analytics summary --profile-id <id>`.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
@@ -84,7 +92,7 @@ not a commitment to implement future items automatically.
 - Improve scheduler observability and daily-run review.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the shared adapter contract.
-- Improve application analytics and follow-up reporting.
+- Improve analytics calibration with reviewed outcomes and longer trend windows.
 - Prepare final anonymized deployment/demo packaging with reviewed screenshots
   and fixture data.
 
