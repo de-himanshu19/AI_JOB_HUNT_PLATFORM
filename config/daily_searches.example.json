@@ -9,7 +9,8 @@
     "page_size": 10,
     "top_n": 10,
     "live_collect": true,
-    "preview_notification": true
+    "preview_notification": true,
+    "ranking_scope": "current-run"
   },
   {
     "name": "data_analyst_englishjobs",
@@ -23,6 +24,7 @@
     "live_collect": true,
     "preview_notification": true,
     "include_prefilter_only": true,
-    "max_detail_requests": 10
+    "max_detail_requests": 10,
+    "ranking_scope": "current-run"
   }
 ]
