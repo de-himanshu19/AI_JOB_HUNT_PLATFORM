@@ -14,6 +14,9 @@ Copy-Item config\daily_searches.example.json config\daily_searches.local.json
 
 Edit `config\daily_searches.local.json` with your local `profile_id` values.
 The `.local.json` file is ignored and should not be committed.
+Daily configs default to `"ranking_scope": "current-run"` so each configured
+search shows the jobs from that run/search first. Set `"ranking_scope": "global"`
+when you want the best overall stored jobs instead.
 
 Run the config manually:
 
@@ -125,3 +128,5 @@ the task stops future runs; it does not delete local history files.
   changes this behavior.
 - Live source collection requires explicit `live_collect: true` in local config
   or `--live-collect` on the command line.
+- Notification preview uses the configured ranking scope; current-run daily
+  previews show the jobs from that search instead of older unrelated rankings.

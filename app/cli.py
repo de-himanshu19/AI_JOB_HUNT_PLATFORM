@@ -30,7 +30,7 @@ from app.services.fit_analysis import FitAnalysisService
 from app.services.legacy_import import LegacyImportService
 from app.services.normalization import CompanyAliases
 from app.services.notifications import NotificationFormatter, NotificationService
-from app.services.pipeline import PipelineRunRequest, PipelineService
+from app.services.pipeline import PipelineRunRequest, PipelineService, RankingScope
 from app.services.ranking import RankingService
 from app.integrations.telegram import TelegramClient
 from app.integrations.ai import build_ai_provider
@@ -248,6 +248,11 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_run.add_argument("--preview-notification", action="store_true")
     pipeline_run.add_argument("--include-prefilter-only", action="store_true")
     pipeline_run.add_argument("--max-detail-requests", type=int)
+    pipeline_run.add_argument(
+        "--ranking-scope",
+        choices=[item.value for item in RankingScope],
+        default=RankingScope.GLOBAL.value,
+    )
     pipeline_run.add_argument("--output", type=Path)
     pipeline_run.add_argument("--no-dashboard-hint", action="store_true")
 
@@ -272,6 +277,11 @@ def build_parser() -> argparse.ArgumentParser:
     daily_run.add_argument("--preview-notification", action="store_true")
     daily_run.add_argument("--include-prefilter-only", action="store_true")
     daily_run.add_argument("--max-detail-requests", type=int)
+    daily_run.add_argument(
+        "--ranking-scope",
+        choices=[item.value for item in RankingScope],
+        default=RankingScope.CURRENT_RUN.value,
+    )
     daily_run.add_argument("--output-dir", type=Path)
     daily_run.add_argument("--lock-file", type=Path)
     daily_config = daily_commands.add_parser("run-config")
@@ -1216,6 +1226,7 @@ def _pipeline(args: argparse.Namespace) -> int:
         preview_notification=args.preview_notification,
         include_prefilter_only=args.include_prefilter_only,
         max_detail_requests=getattr(args, "max_detail_requests", None),
+        ranking_scope=RankingScope(args.ranking_scope),
         output_path=args.output,
         dashboard_hint=not args.no_dashboard_hint,
     ))
@@ -1269,6 +1280,7 @@ def _daily_search_from_args(args: argparse.Namespace) -> DailySearch:
         preview_notification=args.preview_notification,
         include_prefilter_only=args.include_prefilter_only,
         max_detail_requests=args.max_detail_requests,
+        ranking_scope=RankingScope(args.ranking_scope),
     )
 
 

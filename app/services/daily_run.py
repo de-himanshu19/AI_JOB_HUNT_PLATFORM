@@ -15,7 +15,7 @@ from app.db.connection import Database
 from app.domain.enums import JobSource
 from app.services.analysis_rules import AnalysisRules
 from app.services.normalization import CompanyAliases
-from app.services.pipeline import PipelineRunRequest, PipelineService
+from app.services.pipeline import PipelineRunRequest, PipelineService, RankingScope
 
 
 class DailyRunConfigError(ValueError):
@@ -36,6 +36,7 @@ class DailySearch:
     preview_notification: bool = False
     include_prefilter_only: bool = False
     max_detail_requests: int | None = None
+    ranking_scope: RankingScope = RankingScope.CURRENT_RUN
 
     @classmethod
     def from_mapping(cls, value: dict[str, object]) -> "DailySearch":
@@ -65,6 +66,9 @@ class DailySearch:
                 value.get("max_detail_requests"),
                 "max_detail_requests",
                 minimum=0,
+            ),
+            ranking_scope=_ranking_scope(
+                value.get("ranking_scope", RankingScope.CURRENT_RUN.value)
             ),
         )
 
@@ -170,6 +174,7 @@ class DailyRunService:
                     preview_notification=search.preview_notification,
                     include_prefilter_only=search.include_prefilter_only,
                     max_detail_requests=search.max_detail_requests,
+                    ranking_scope=search.ranking_scope,
                     dashboard_hint=True,
                 )
             )
@@ -303,6 +308,16 @@ def _optional_int(value: object, field: str, *, minimum: int) -> int | None:
     if value is None:
         return None
     return _int(value, field, minimum=minimum)
+
+
+def _ranking_scope(value: object) -> RankingScope:
+    normalized = str(value or "").strip().replace("_", "-")
+    try:
+        return RankingScope(normalized)
+    except ValueError as error:
+        raise DailyRunConfigError(
+            "ranking_scope must be 'global' or 'current-run'"
+        ) from error
 
 
 def _jobs_collected(summary: dict[str, object]) -> int:

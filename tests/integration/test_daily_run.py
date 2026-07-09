@@ -7,15 +7,23 @@ from pathlib import Path
 import app.cli as cli
 from app.db.connection import Database
 from app.db.migrations import migrate
-from app.domain.enums import JobSource
+from app.domain.enums import DescriptionCompleteness, JobSource
+from app.domain.job import Job, JobDescription
 from app.services.daily_run import (
     DailyRunConfigError,
     DailyRunService,
     DailySearch,
     load_searches,
 )
+from app.services.pipeline import PipelineService, RankingScope
+from app.sources.base import CollectedJob, CollectionResult, SourceRunStatus
 
-from tests.integration.test_pipeline import _profile, _rules, _seed_stored_job, _settings
+from tests.integration.test_pipeline import (
+    _profile,
+    _rules,
+    _seed_stored_job,
+    _settings,
+)
 
 
 class FakePipeline:
@@ -30,6 +38,7 @@ class FakePipeline:
             "location": request.location,
             "sources_requested": [source.value for source in request.sources],
             "live_collect": request.live_collect,
+            "ranking_scope": request.ranking_scope.value,
             "collection": {
                 source.value: {
                     "status": "completed",
@@ -119,6 +128,104 @@ def test_run_config_executes_multiple_searches_with_configured_bounds(tmp_path) 
     ]
     assert calls[1].include_prefilter_only is True
     assert calls[1].max_detail_requests == 10
+    assert calls[0].ranking_scope is RankingScope.CURRENT_RUN
+    assert calls[1].ranking_scope is RankingScope.CURRENT_RUN
+
+
+def test_run_config_can_request_global_ranking_scope(tmp_path) -> None:
+    service, calls = _daily_service(tmp_path)
+    config = tmp_path / "daily global.json"
+    config.write_text(
+        json.dumps([
+            {
+                "name": "global",
+                "profile_id": "profile-1",
+                "source": "arbeitsagentur",
+                "ranking_scope": "global",
+            }
+        ]),
+        encoding="utf-8",
+    )
+
+    service.run_config_file(config)
+
+    assert calls[0].ranking_scope is RankingScope.GLOBAL
+
+
+def test_daily_run_config_englishjobs_current_run_not_dominated_by_old_global_jobs(
+    tmp_path,
+) -> None:
+    settings = _settings(tmp_path)
+    database = Database.from_settings(settings)
+    migrate(database)
+    profile, _ = _seed_stored_job(database)
+
+    class FakeEnglishJobsCollector:
+        def collect(self, request):
+            job = Job(
+                source=JobSource.ENGLISHJOBS,
+                source_job_id="daily-ej-current",
+                title_raw="Daily EnglishJobs Discovery Analyst",
+                title_normalized="daily englishjobs discovery analyst",
+                company_raw="Fresh Jobs GmbH",
+                company_normalized="fresh jobs gmbh",
+                location_raw="Hamburg",
+            )
+            description = JobDescription(
+                job_id=job.id,
+                raw_text="SQL reporting dashboard snippet",
+                normalized_text="SQL reporting dashboard snippet",
+                completeness=DescriptionCompleteness.SNIPPET,
+                content_hash="a" * 64,
+            )
+            return CollectionResult(
+                jobs=[CollectedJob(job=job, description=description)],
+                jobs_parsed=1,
+                search_requests_succeeded=1,
+                status=SourceRunStatus.COMPLETED,
+            )
+
+    service = DailyRunService(
+        database,
+        settings,
+        _rules(),
+        pipeline_factory=lambda: PipelineService(
+            database,
+            settings,
+            _rules(),
+            collector_factory=lambda source: FakeEnglishJobsCollector(),
+            now=lambda: datetime(2026, 7, 9, 8, 0, tzinfo=UTC),
+        ),
+        now=lambda: datetime(2026, 7, 9, 8, 0, tzinfo=UTC),
+        output_dir=tmp_path / "daily output",
+        lock_path=tmp_path / "locks" / "daily_run.lock",
+    )
+    config = tmp_path / "daily-ej.json"
+    config.write_text(
+        json.dumps([
+            {
+                "name": "ej",
+                "profile_id": str(profile.id),
+                "source": "englishjobs",
+                "live_collect": True,
+                "include_prefilter_only": True,
+                "preview_notification": True,
+            }
+        ]),
+        encoding="utf-8",
+    )
+
+    summary = service.run_config_file(config)
+    pipeline = summary["searches"][0]["pipeline_summary"]
+
+    assert pipeline["ranking_scope"] == "current-run"
+    assert [item["title"] for item in pipeline["top_jobs"]] == [
+        "Daily EnglishJobs Discovery Analyst"
+    ]
+    assert pipeline["top_jobs"][0]["authority"] == "prefilter_only"
+    assert pipeline["top_jobs_global"][0]["title"] == "Data Analyst"
+    assert pipeline["notification_preview"]["selected_count"] == 1
+    assert pipeline["notification_preview"]["ranking_scope"] == "current-run"
 
 
 def test_malformed_and_missing_config_fail_clearly(tmp_path) -> None:
@@ -192,6 +299,7 @@ def test_daily_cli_without_live_collect_uses_stored_jobs_and_no_live_collection(
     assert exit_code == 0
     assert output["status"] == "completed"
     assert output["searches"][0]["pipeline_summary"]["live_collect"] is False
+    assert output["searches"][0]["pipeline_summary"]["ranking_scope"] == "current-run"
     assert (
         output["searches"][0]["pipeline_summary"]["collection"]["arbeitsagentur"][
             "network_requested"

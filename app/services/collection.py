@@ -34,6 +34,7 @@ class CollectionExecutionReport(BaseModel):
     jobs_inserted: int = Field(default=0, ge=0)
     jobs_updated: int = Field(default=0, ge=0)
     description_versions_inserted: int = Field(default=0, ge=0)
+    touched_job_ids: tuple[UUID, ...] = ()
     dry_run: bool = False
 
 
@@ -101,10 +102,11 @@ class CollectionService:
         inserted = 0
         updated = 0
         description_versions = 0
+        touched_job_ids: tuple[UUID, ...] = ()
         try:
             result = adapter.collect(request)
             if result.status is not SourceRunStatus.FAILED:
-                inserted, updated, description_versions = self._persist_result(
+                inserted, updated, description_versions, touched_job_ids = self._persist_result(
                     result, run.id, started_at
                 )
         except Exception as error:
@@ -152,6 +154,7 @@ class CollectionService:
             jobs_inserted=inserted,
             jobs_updated=updated,
             description_versions_inserted=description_versions,
+            touched_job_ids=touched_job_ids,
             dry_run=False,
         )
 
@@ -160,10 +163,11 @@ class CollectionService:
         result: CollectionResult,
         run_id: UUID,
         observed_at: datetime,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, tuple[UUID, ...]]:
         inserted = 0
         updated = 0
         description_versions = 0
+        touched_job_ids: list[UUID] = []
         with self.database.transaction() as connection:
             jobs = JobRepository(connection)
             descriptions = JobDescriptionRepository(connection)
@@ -188,6 +192,7 @@ class CollectionService:
                     }
                 )
                 stored, created = jobs.upsert(job)
+                touched_job_ids.append(stored.id)
                 inserted += int(created)
                 updated += int(not created)
                 description = collected.description.model_copy(
@@ -195,7 +200,7 @@ class CollectionService:
                 )
                 _, description_created = descriptions.save_version(description)
                 description_versions += int(description_created)
-        return inserted, updated, description_versions
+        return inserted, updated, description_versions, tuple(touched_job_ids)
 
     def _dry_run_counts(self, result: CollectionResult) -> tuple[int, int]:
         if not self.database.path.exists():

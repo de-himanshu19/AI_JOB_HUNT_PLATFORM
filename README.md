@@ -158,6 +158,10 @@ python -m app.cli pipeline run `
   --preview-notification
 ```
 
+Pipeline ranking is global by default, meaning `top_jobs` shows the best
+overall stored jobs in the database. Use `--ranking-scope current-run` to review
+only jobs collected or touched by that pipeline run.
+
 Run a bounded live Arbeitsagentur collection:
 
 ```powershell
@@ -179,6 +183,10 @@ Run the local daily wrapper:
 ```powershell
 python -m app.cli daily run-config --config config/daily_searches.local.json
 ```
+
+Daily search configs default to current-run ranking so each morning digest shows
+the jobs from that search first. Global ranking remains available with
+`"ranking_scope": "global"`.
 
 Shortlist a job:
 

@@ -87,10 +87,14 @@ class NotificationFormatter:
         company = _clean(snapshot.get("company"), 120) or "Company not listed"
         reason = _clean(snapshot.get("reason"), 240) or "See stored analysis for details."
         url = _clean(snapshot.get("url"), 1200)
+        fit_score = snapshot.get("fit_score")
+        fit_label = (
+            f"{float(fit_score):.2f}" if fit_score is not None else "prefilter only"
+        )
         lines = [
             f"{snapshot['position']}. {_clean(snapshot.get('title'), 160)}",
             f"{company} | {location}",
-            f"Rank: {float(snapshot['rank_score']):.2f} | Fit: {float(snapshot['fit_score']):.2f}",
+            f"Rank: {float(snapshot['rank_score']):.2f} | Fit: {fit_label}",
             reason,
             f"Job ID: {snapshot['job_id']}",
         ]

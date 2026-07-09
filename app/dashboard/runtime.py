@@ -81,10 +81,17 @@ def cached_daily_runs(daily_runs_dir: str, limit: int):
         except (OSError, json.JSONDecodeError):
             continue
         searches = payload.get("searches", [])
+        scopes = [
+            item.get("pipeline_summary", {}).get("ranking_scope")
+            for item in searches if isinstance(item, dict)
+        ]
         rows.append({
             "status": payload.get("status"),
             "started_at": payload.get("started_at"),
             "finished_at": payload.get("finished_at"),
+            "ranking_scope": ", ".join(
+                dict.fromkeys(str(scope) for scope in scopes if scope)
+            ),
             "searches": payload.get("total_searches", len(searches)),
             "jobs_collected": sum(
                 int(item.get("jobs_collected", 0) or 0)

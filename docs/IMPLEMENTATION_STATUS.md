@@ -202,6 +202,24 @@ External credential rotation remains a manual security gate. No credential value
 - Dashboard Runs & Diagnostics shows recent daily-run summaries passively; page
   browsing never starts a run.
 
+### Migration Milestone 17
+
+- Pipeline requests support explicit `ranking_scope` values: `global` preserves
+  existing whole-database ranking behavior, while `current-run` filters ranked
+  output to jobs touched by the current collection step or their linked logical
+  clusters.
+- Pipeline JSON now includes `ranking_scope`, `top_jobs_global`,
+  `top_jobs_current_run`, and selected-scope `top_jobs` for backward-compatible
+  clarity.
+- Daily search configs default to current-run ranking so multi-search daily
+  digests show the jobs from each source/search instead of unrelated older
+  global results.
+- Current-run notification preview is built from scoped ranked jobs and can show
+  EnglishJobs `prefilter_only` discovery jobs when `include_prefilter_only` is
+  enabled; global notification preview behavior is preserved.
+- Dashboard daily-run summaries display ranking scope passively and never start
+  a run.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -243,6 +261,8 @@ No legacy module is imported, and no file under `existing_projects/` is modified
   diagnostics, updated EnglishJobs tests/fixtures, and `docs/SOURCES.md`.
 - Milestone 16: daily-run service/CLI, example config, PowerShell wrapper,
   scheduler docs, daily-run dashboard visibility, and focused tests.
+- Milestone 17: pipeline ranking-scope support, current-run daily defaults,
+  scoped notification preview, dashboard scope visibility, and focused tests.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

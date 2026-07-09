@@ -14,7 +14,7 @@ from app.db.migrations import migrate
 from app.domain.enums import DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
 from app.services.applications import ApplicationService
-from app.services.pipeline import PipelineRunRequest, PipelineService
+from app.services.pipeline import PipelineRunRequest, PipelineService, RankingScope
 from app.sources.base import CollectedJob, CollectionResult, SourceRunStatus
 
 from tests.integration.test_fit_analysis_persistence import (
@@ -230,6 +230,117 @@ def test_pipeline_englishjobs_live_collect_summary_includes_detail_diagnostics(
     assert collection["detail_requests_failed"] == 0
     assert collection["parsing_errors"] == 0
     assert summary["top_jobs"][0]["application_status"] is None
+
+
+def test_pipeline_global_ranking_remains_default_for_existing_behavior(tmp_path) -> None:
+    settings, database, _ = _service(tmp_path)
+    profile, _ = _seed_stored_job(database)
+
+    class FakeEnglishJobsCollector:
+        def collect(self, request):
+            job = Job(
+                source=JobSource.ENGLISHJOBS,
+                source_job_id="ej-snippet-current",
+                title_raw="Junior Reporting Analyst",
+                title_normalized="junior reporting analyst",
+                company_raw="Fresh Jobs GmbH",
+                company_normalized="fresh jobs gmbh",
+                location_raw="Hamburg",
+            )
+            description = JobDescription(
+                job_id=job.id,
+                raw_text="SQL dashboard reporting snippet",
+                normalized_text="SQL dashboard reporting snippet",
+                completeness=DescriptionCompleteness.SNIPPET,
+                content_hash="e" * 64,
+            )
+            return CollectionResult(
+                jobs=[CollectedJob(job=job, description=description)],
+                jobs_parsed=1,
+                search_requests_succeeded=1,
+                status=SourceRunStatus.COMPLETED,
+            )
+
+    service = PipelineService(
+        database,
+        settings,
+        _rules(),
+        collector_factory=lambda source: FakeEnglishJobsCollector(),
+        now=lambda: datetime(2026, 7, 9, 10, 0, tzinfo=UTC),
+    )
+    summary = service.run(PipelineRunRequest(
+        profile_id=profile.id,
+        sources=(JobSource.ENGLISHJOBS,),
+        live_collect=True,
+        include_prefilter_only=True,
+    ))
+
+    assert summary["ranking_scope"] == "global"
+    assert summary["top_jobs"][0]["title"] == "Data Analyst"
+    assert summary["top_jobs_global"][0]["title"] == "Data Analyst"
+    assert any(
+        item["title"] == "Junior Reporting Analyst"
+        for item in summary["top_jobs_current_run"]
+    )
+
+
+def test_pipeline_current_run_ranking_only_includes_touched_jobs_and_prefilter_preview(
+    tmp_path,
+) -> None:
+    settings, database, _ = _service(tmp_path)
+    profile, _ = _seed_stored_job(database)
+
+    class FakeEnglishJobsCollector:
+        def collect(self, request):
+            job = Job(
+                source=JobSource.ENGLISHJOBS,
+                source_job_id="ej-current-prefilter",
+                title_raw="EnglishJobs Discovery Analyst",
+                title_normalized="englishjobs discovery analyst",
+                company_raw="Fresh Jobs GmbH",
+                company_normalized="fresh jobs gmbh",
+                location_raw="Hamburg",
+            )
+            description = JobDescription(
+                job_id=job.id,
+                raw_text="SQL dashboard reporting stakeholder snippet",
+                normalized_text="SQL dashboard reporting stakeholder snippet",
+                completeness=DescriptionCompleteness.SNIPPET,
+                content_hash="f" * 64,
+            )
+            return CollectionResult(
+                jobs=[CollectedJob(job=job, description=description)],
+                jobs_parsed=1,
+                search_requests_succeeded=1,
+                status=SourceRunStatus.COMPLETED,
+            )
+
+    service = PipelineService(
+        database,
+        settings,
+        _rules(),
+        collector_factory=lambda source: FakeEnglishJobsCollector(),
+        now=lambda: datetime(2026, 7, 9, 10, 0, tzinfo=UTC),
+    )
+    summary = service.run(PipelineRunRequest(
+        profile_id=profile.id,
+        sources=(JobSource.ENGLISHJOBS,),
+        live_collect=True,
+        include_prefilter_only=True,
+        preview_notification=True,
+        ranking_scope=RankingScope.CURRENT_RUN,
+    ))
+
+    assert summary["ranking_scope"] == "current-run"
+    assert [item["title"] for item in summary["top_jobs"]] == [
+        "EnglishJobs Discovery Analyst"
+    ]
+    assert summary["top_jobs"][0]["authority"] == "prefilter_only"
+    assert summary["top_jobs"][0]["fit_score"] is None
+    assert summary["top_jobs"][0]["fit_score_label"] == "prefilter_only"
+    assert summary["top_jobs_global"][0]["title"] == "Data Analyst"
+    assert summary["notification_preview"]["ranking_scope"] == "current-run"
+    assert summary["notification_preview"]["selected_count"] == 1
 
 
 def test_pipeline_source_parser_rejects_invalid_source() -> None:

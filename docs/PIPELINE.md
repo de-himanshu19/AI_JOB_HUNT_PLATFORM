@@ -14,6 +14,33 @@ The daily-run command reuses this same pipeline service and adds only local run
 history, config-file iteration, and lock protection. It does not change pipeline
 business rules.
 
+## Ranking Scope
+
+Pipeline ranking is global by default:
+
+- `global`: rank the best overall logical vacancies currently stored in the
+  database. This preserves the original pipeline behavior.
+- `current-run`: rank only jobs collected or updated in this collection step, or
+  logical clusters linked to those jobs.
+
+Use current-run scope for daily source/search review:
+
+```powershell
+python -m app.cli pipeline run `
+  --profile-id <PROFILE_ID> `
+  --source englishjobs `
+  --query "Data Analyst" `
+  --location Germany `
+  --live-collect `
+  --include-prefilter-only `
+  --ranking-scope current-run `
+  --preview-notification
+```
+
+When EnglishJobs produces snippet-only descriptions, current-run ranking can
+show `prefilter_only` jobs if `--include-prefilter-only` is present. These jobs
+remain discovery candidates; they do not receive authoritative fit scores.
+
 ## Safe Dry Run
 
 Without `--live-collect`, the pipeline never contacts Arbeitsagentur or

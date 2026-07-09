@@ -68,6 +68,15 @@ not a commitment to implement future items automatically.
 - PowerShell wrapper for Windows Task Scheduler.
 - Passive dashboard visibility for recent daily runs.
 
+### M17: Run-Scoped Ranking And Daily Digest Clarity
+
+- Pipeline supports `global` and `current-run` ranking scopes.
+- Existing pipeline behavior remains global by default.
+- Daily search configs default to current-run ranking for clearer source/search
+  review.
+- Current-run notification preview uses scoped rankings, including EnglishJobs
+  `prefilter_only` discovery jobs when explicitly allowed.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
