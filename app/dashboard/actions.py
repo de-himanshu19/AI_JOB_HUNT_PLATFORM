@@ -105,6 +105,21 @@ class DashboardActions:
             note=note,
         )
 
+    def attach_cv_artifact(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        cv_artifact_id: UUID | str,
+        *,
+        note: str | None = None,
+    ):
+        return ApplicationService(self.database).mark_cv_ready(
+            profile_id,
+            job_id,
+            cv_artifact_id=cv_artifact_id,
+            note=note,
+        )
+
     def review_duplicate(
         self, candidate_id: UUID | str, decision: str, *, confirmed: bool
     ) -> None:

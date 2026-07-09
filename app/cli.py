@@ -187,8 +187,12 @@ def build_parser() -> argparse.ArgumentParser:
     cv_manual.add_argument("--force-regenerate", action="store_true")
     cv_list = cv_commands.add_parser("list")
     cv_list.add_argument("--job-id")
+    cv_list.add_argument("--profile-id")
     cv_show = cv_commands.add_parser("show")
-    cv_show.add_argument("artifact_id")
+    cv_show.add_argument("artifact_id", nargs="?")
+    cv_show.add_argument("--artifact-id", dest="artifact_id_option")
+    cv_show.add_argument("--text", action="store_true")
+    cv_show.add_argument("--evidence", action="store_true")
 
     legacy = commands.add_parser("legacy", help="Import legacy local files safely")
     legacy_commands = legacy.add_subparsers(dest="legacy_command", required=True)
@@ -267,6 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
     app_cv.add_argument("--job-id", required=True)
     app_cv.add_argument("--cv-artifact-id")
     app_cv.add_argument("--note")
+    app_attach_cv = application_commands.add_parser("attach-cv")
+    app_attach_cv.add_argument("--profile-id", required=True)
+    app_attach_cv.add_argument("--job-id", required=True)
+    app_attach_cv.add_argument("--cv-artifact-id", required=True)
+    app_attach_cv.add_argument("--note")
     app_follow = application_commands.add_parser("follow-up")
     app_follow.add_argument("--profile-id", required=True)
     app_follow.add_argument("--job-id", required=True)
@@ -811,6 +820,7 @@ def _artifact_json(artifact):
         "rules_version": artifact.rules_version,
         "generator_version": artifact.generator_version,
         "formatter_version": artifact.formatter_version,
+        "builder_content_version": CV_BUILDER_CONTENT_VERSION,
         "artifact_path": str(artifact.artifact_path),
         "evidence_report_path": str(artifact.evidence_report_path),
         "content_hash": artifact.content_hash,
@@ -892,17 +902,28 @@ def _cv(args: argparse.Namespace) -> int:
             force_regenerate=args.force_regenerate,
         )
     elif args.cv_command == "list":
-        artifacts = service.list_artifacts(args.job_id)
+        artifacts = service.list_artifacts(
+            profile_id=args.profile_id, job_id=args.job_id
+        )
         print(json.dumps(
             [_artifact_json(item) for item in artifacts], ensure_ascii=False, indent=2
         ))
         return 0
     elif args.cv_command == "show":
-        artifact, attempts = service.artifact_details(args.artifact_id)
+        artifact_id = args.artifact_id_option or args.artifact_id
+        if not artifact_id:
+            raise ValueError("cv show requires an artifact ID")
+        artifact, attempts = service.artifact_details(artifact_id)
         output = _artifact_json(artifact)
         output["ai_attempts"] = [
             item.model_dump(mode="json") for item in attempts
         ]
+        if args.text:
+            output["cv_text"] = service.read_artifact_text(artifact.id)
+        if args.evidence:
+            output["evidence_report_text"] = service.read_artifact_text(
+                artifact.id, evidence=True
+            )
         print(json.dumps(output, ensure_ascii=False, indent=2))
         return 0
     else:
@@ -960,7 +981,7 @@ def _applications(args: argparse.Namespace) -> int:
             status=args.status,
             note=args.note,
         ))
-    elif command == "cv-ready":
+    elif command in {"cv-ready", "attach-cv"}:
         output = _application_json(service.mark_cv_ready(
             args.profile_id,
             args.job_id,

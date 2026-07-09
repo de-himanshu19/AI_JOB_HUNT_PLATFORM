@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.db.connection import Database
 from app.db.repositories import CandidateProfileRepository
+from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION
 from app.services.deduplication import DEDUPLICATION_VERSION
 from app.dashboard.view_models import (
     DuplicateReviewView,
@@ -386,6 +387,32 @@ class DashboardQueryService:
                     a.created_at, a.updated_at,
                     j.title_raw, j.company_raw, j.location_raw, j.source,
                     (
+                        SELECT c.id FROM cv_generation_artifacts c
+                        WHERE c.profile_id = a.profile_id
+                          AND (
+                            c.job_id = a.job_id OR
+                            (a.logical_cluster_id IS NOT NULL
+                             AND c.logical_cluster_id = a.logical_cluster_id)
+                          )
+                        ORDER BY c.created_at DESC, c.id DESC
+                        LIMIT 1
+                    ) AS latest_cv_artifact_id,
+                    CASE
+                        WHEN a.cv_artifact_id IS NOT NULL
+                         AND a.cv_artifact_id != (
+                            SELECT c.id FROM cv_generation_artifacts c
+                            WHERE c.profile_id = a.profile_id
+                              AND (
+                                c.job_id = a.job_id OR
+                                (a.logical_cluster_id IS NOT NULL
+                                 AND c.logical_cluster_id = a.logical_cluster_id)
+                              )
+                            ORDER BY c.created_at DESC, c.id DESC
+                            LIMIT 1
+                         )
+                        THEN 1 ELSE 0
+                    END AS attached_cv_differs_from_latest,
+                    (
                         SELECT jr.rank_score FROM job_rankings jr
                         WHERE jr.profile_id = a.profile_id
                           AND (
@@ -419,6 +446,94 @@ class DashboardQueryService:
                 WHERE {where} ORDER BY a.updated_at DESC, a.id""", parameters,
             ).fetchall()
         return tuple(dict(row) for row in rows)
+
+    def list_cv_artifacts(
+        self,
+        profile_id: UUID | str | None = None,
+        job_id: UUID | str | None = None,
+    ) -> tuple[dict[str, object], ...]:
+        clauses = []
+        parameters: list[object] = []
+        if profile_id:
+            clauses.append("c.profile_id = ?")
+            parameters.append(str(profile_id))
+        if job_id:
+            clauses.append("c.job_id = ?")
+            parameters.append(str(job_id))
+        where = " AND ".join(clauses) if clauses else "1 = 1"
+        with self.database.read_connection() as connection:
+            rows = connection.execute(
+                f"""SELECT
+                    c.id AS artifact_id, c.job_id, c.logical_cluster_id,
+                    c.profile_id, p.profile_key, c.generation_mode, c.source,
+                    c.generator_version, c.formatter_version,
+                    ? AS builder_content_version,
+                    c.validated, c.artifact_path, c.evidence_report_path,
+                    c.created_at, j.title_raw, j.company_raw, j.location_raw,
+                    a.status AS application_status,
+                    a.cv_artifact_id AS attached_cv_artifact_id,
+                    CASE WHEN a.cv_artifact_id = c.id THEN 1 ELSE 0 END AS attached
+                FROM cv_generation_artifacts c
+                LEFT JOIN jobs j ON j.id = c.job_id
+                LEFT JOIN candidate_profiles p ON p.id = c.profile_id
+                LEFT JOIN applications a
+                    ON a.profile_id = c.profile_id
+                   AND (
+                        a.job_id = c.job_id OR
+                        (c.logical_cluster_id IS NOT NULL
+                         AND a.logical_cluster_id = c.logical_cluster_id)
+                   )
+                WHERE {where}
+                ORDER BY c.created_at DESC, c.id DESC""",
+                (CV_BUILDER_CONTENT_VERSION, *parameters),
+            ).fetchall()
+        return tuple(dict(row) for row in rows)
+
+    def get_cv_artifact_detail(self, artifact_id: UUID | str) -> dict[str, object]:
+        rows = self.list_cv_artifacts()
+        for row in rows:
+            if str(row["artifact_id"]) == str(artifact_id):
+                return row
+        raise KeyError(f"CV artifact not found: {artifact_id}")
+
+    def read_cv_artifact_text(self, artifact_id: UUID | str) -> dict[str, object]:
+        return self._read_cv_file(artifact_id, evidence=False)
+
+    def read_evidence_report_text(self, artifact_id: UUID | str) -> dict[str, object]:
+        return self._read_cv_file(artifact_id, evidence=True)
+
+    def list_applications_with_cv_context(
+        self, profile_id: UUID | str | None = None
+    ) -> tuple[dict[str, object], ...]:
+        return self.applications(profile_id)
+
+    def _read_cv_file(
+        self, artifact_id: UUID | str, *, evidence: bool
+    ) -> dict[str, object]:
+        with self.database.read_connection() as connection:
+            row = connection.execute(
+                """SELECT artifact_path, evidence_report_path
+                FROM cv_generation_artifacts WHERE id = ?""",
+                (str(artifact_id),),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"CV artifact not found: {artifact_id}")
+        path = Path(row["evidence_report_path"] if evidence else row["artifact_path"])
+        if not path.is_file():
+            return {
+                "artifact_id": str(artifact_id),
+                "path": str(path),
+                "found": False,
+                "text": None,
+                "message": "Stored artifact file is missing.",
+            }
+        return {
+            "artifact_id": str(artifact_id),
+            "path": str(path),
+            "found": True,
+            "text": path.read_text(encoding="utf-8"),
+            "message": None,
+        }
 
     def runs(self, limit: int = 100) -> tuple[dict[str, object], ...]:
         with self.database.read_connection() as connection:

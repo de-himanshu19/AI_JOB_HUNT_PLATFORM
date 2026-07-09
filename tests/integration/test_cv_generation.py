@@ -102,6 +102,50 @@ def test_stored_generation_is_validated_persisted_and_cached(tmp_path) -> None:
     assert service.artifact_details(artifact.id)[0] == artifact
 
 
+def test_cv_artifact_listing_filters_and_cli_text_views(
+    tmp_path, monkeypatch, capsys,
+) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    job = _job(database)
+    service = CVGenerationService(database, settings, rules)
+    artifact = service.generate_for_job(
+        job.id, profile.id, force_regenerate=True
+    ).rule_based_artifact
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+    assert [item.id for item in service.list_artifacts(profile_id=profile.id)] == [
+        artifact.id
+    ]
+    assert [item.id for item in service.list_artifacts(job_id=job.id)] == [
+        artifact.id
+    ]
+    assert cli.main(["cv", "list", "--profile-id", str(profile.id)]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert listed[0]["artifact_id"] == str(artifact.id)
+    assert listed[0]["builder_content_version"]
+
+    assert cli.main(["cv", "show", "--artifact-id", str(artifact.id)]) == 0
+    metadata = json.loads(capsys.readouterr().out)
+    assert metadata["artifact_id"] == str(artifact.id)
+    assert "cv_text" not in metadata
+    assert "evidence_report_text" not in metadata
+
+    assert cli.main(["cv", "show", "--artifact-id", str(artifact.id), "--text"]) == 0
+    with_text = json.loads(capsys.readouterr().out)
+    assert "PROFESSIONAL SUMMARY" in with_text["cv_text"]
+
+    assert cli.main(["cv", "show", str(artifact.id), "--evidence"]) == 0
+    with_evidence = json.loads(capsys.readouterr().out)
+    assert "PRIVATE EVIDENCE REPORT" in with_evidence["evidence_report_text"]
+
+    try:
+        cli.main(["cv", "show", "--artifact-id", "missing"])
+    except KeyError as error:
+        assert "CV artifact not found" in str(error)
+    else:
+        raise AssertionError("Missing artifact ID did not fail clearly")
+
+
 def test_changed_description_and_profile_create_new_artifacts_without_overwrite(tmp_path) -> None:
     settings, database, profile, rules = _setup(tmp_path)
     job = _job(database)

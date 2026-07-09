@@ -133,3 +133,76 @@ def test_applications_query_includes_crm_and_score_context(database: Database) -
     assert rows[0]["rank_score"] is not None
     assert rows[0]["fit_score"] is not None
     assert rows[0]["notes_preview"] == "Dashboard follow-up"
+
+
+def test_cv_artifact_queries_read_text_and_handle_missing_files(
+    database: Database, tmp_path: Path,
+) -> None:
+    profile, jobs = _seed_logical_vacancy(database)
+    with database.read_connection() as connection:
+        analyzed_job_id = connection.execute(
+            """SELECT job_id FROM job_analyses
+            WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(profile.id),),
+        ).fetchone()["job_id"]
+    job = next(item for item in jobs if str(item.id) == analyzed_job_id)
+    application = ApplicationService(database).shortlist_job(profile.id, job.id)
+    cv_path = tmp_path / "flowcv.txt"
+    evidence_path = tmp_path / "evidence.txt"
+    cv_path.write_text("FlowCV copy text", encoding="utf-8")
+    evidence_path.write_text("Private evidence text", encoding="utf-8")
+    artifact_id = "22222222-2222-4222-8222-222222222222"
+    with database.transaction() as connection:
+        description = connection.execute(
+            """SELECT id, content_hash FROM job_descriptions
+            WHERE job_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(job.id),),
+        ).fetchone()
+        analysis = connection.execute(
+            """SELECT id FROM job_analyses
+            WHERE job_id = ? AND profile_id = ? ORDER BY created_at DESC LIMIT 1""",
+            (str(job.id), str(profile.id)),
+        ).fetchone()
+        connection.execute(
+            """INSERT INTO cv_generation_artifacts (
+                id, job_id, logical_cluster_id, description_id,
+                description_content_hash, description_completeness, profile_id,
+                profile_version, profile_content_hash, analysis_id,
+                analyzer_version, rules_version, generator_version,
+                formatter_version, generation_mode, generation_identity,
+                artifact_format, source, parent_rule_based_artifact_id,
+                artifact_path, evidence_report_path, content_hash,
+                evidence_report_hash, provider, model, prompt_version,
+                ai_generated_at, validated, validation_result_json, created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, 'full', ?, 1, ?, ?, 'analyzer', 'rules',
+                'generator', 'formatter', 'stored_job', ?, 'flowcv_txt',
+                'rule_based', NULL, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 1,
+                '{}', '2026-07-09T00:00:00+00:00'
+            )""",
+            (
+                artifact_id, str(job.id), str(application.logical_cluster_id),
+                description["id"], description["content_hash"], str(profile.id),
+                profile.content_hash, analysis["id"], "i" * 64, str(cv_path),
+                str(evidence_path), "c" * 64, "e" * 64,
+            ),
+        )
+
+    service = DashboardQueryService(database)
+    artifacts = service.list_cv_artifacts(profile.id)
+    detail = service.get_cv_artifact_detail(artifact_id)
+
+    assert artifacts[0]["artifact_id"] == artifact_id
+    assert artifacts[0]["application_status"] == "shortlisted"
+    assert detail["title_raw"] == "Data Analyst"
+    assert service.read_cv_artifact_text(artifact_id)["text"] == "FlowCV copy text"
+    assert (
+        service.read_evidence_report_text(artifact_id)["text"]
+        == "Private evidence text"
+    )
+    applications = service.list_applications_with_cv_context(profile.id)
+    assert applications[0]["latest_cv_artifact_id"] == artifact_id
+    cv_path.unlink()
+    missing = service.read_cv_artifact_text(artifact_id)
+    assert missing["found"] is False
+    assert "missing" in missing["message"]

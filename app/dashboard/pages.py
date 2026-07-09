@@ -548,8 +548,8 @@ def applications_page() -> None:
 def cv_builder_page() -> None:
     context = runtime()
     page_header(
-        "CV Builder",
-        "Generate the deterministic, validated FlowCV artifact first. Private evidence remains clearly separated.",
+        "CV Workflow",
+        "Generate, review, copy, and attach deterministic FlowCV artifacts without automatic submission.",
         eyebrow="Application preparation",
     )
     profile_id = _profile_id()
@@ -632,6 +632,117 @@ def cv_builder_page() -> None:
             "Use it for verification only; it is not recruiter-facing content.</div>",
             unsafe_allow_html=True,
         )
+    st.subheader("Generated CV artifacts")
+    artifacts = context.queries.list_cv_artifacts(profile_id)
+    if not artifacts:
+        st.info("No CV artifacts are stored for the selected profile yet.")
+        return
+    artifact_columns = [
+        "artifact_id", "title_raw", "company_raw", "location_raw",
+        "generation_mode", "source", "formatter_version",
+        "builder_content_version", "validated", "application_status",
+        "attached_cv_artifact_id", "created_at",
+    ]
+    st.dataframe(
+        [{key: item.get(key) for key in artifact_columns} for item in artifacts],
+        use_container_width=True,
+        hide_index=True,
+    )
+    selected_artifact = st.selectbox(
+        "CV artifact",
+        [str(item["artifact_id"]) for item in artifacts],
+        format_func=lambda value: next(
+            f"{item.get('title_raw') or 'Manual JD'} | {item['source']} | {value}"
+            for item in artifacts if str(item["artifact_id"]) == value
+        ),
+    )
+    artifact = context.queries.get_cv_artifact_detail(selected_artifact)
+    with st.expander("Artifact metadata", expanded=True):
+        st.json(artifact)
+    show_text = st.checkbox("Show FlowCV TXT content", key="cv-workflow-show-text")
+    if show_text:
+        payload = context.queries.read_cv_artifact_text(selected_artifact)
+        if payload["found"]:
+            st.text_area(
+                "FlowCV TXT",
+                payload["text"],
+                height=420,
+                key=f"cv-text-{selected_artifact}",
+            )
+        else:
+            st.warning(payload["message"])
+            st.caption(payload["path"])
+    show_evidence = st.checkbox(
+        "Show private evidence report",
+        key="cv-workflow-show-evidence",
+        help="Evidence reports are for verification only, not recruiter-facing copy.",
+    )
+    if show_evidence:
+        payload = context.queries.read_evidence_report_text(selected_artifact)
+        if payload["found"]:
+            st.text_area(
+                "Private evidence report",
+                payload["text"],
+                height=420,
+                key=f"cv-evidence-{selected_artifact}",
+            )
+        else:
+            st.warning(payload["message"])
+            st.caption(payload["path"])
+    if artifact.get("job_id"):
+        st.markdown("**Attach to application**")
+        applications = [
+            item for item in context.queries.list_applications_with_cv_context(profile_id)
+            if str(item.get("job_id")) == str(artifact["job_id"])
+            or (
+                item.get("logical_cluster_id")
+                and item.get("logical_cluster_id") == artifact.get("logical_cluster_id")
+            )
+        ]
+        if not applications:
+            st.info("Track this job as an application before attaching a CV.")
+        else:
+            selected_application = st.selectbox(
+                "Tracked application",
+                [str(item["id"]) for item in applications],
+                format_func=lambda value: next(
+                    f"{item['title_raw']} | {item['current_status']} | {value}"
+                    for item in applications if str(item["id"]) == value
+                ),
+                key="cv-workflow-application",
+            )
+            application = next(
+                item for item in applications if str(item["id"]) == selected_application
+            )
+            note = st.text_input(
+                "Attach note",
+                value="CV reviewed in dashboard",
+                key="cv-workflow-attach-note",
+            )
+            confirmed = st.checkbox(
+                "Confirm Attach CV / Mark CV Ready",
+                key="cv-workflow-attach-confirm",
+            )
+            if st.button("Attach CV / Mark CV Ready", type="primary"):
+                if not confirmed:
+                    st.warning("Confirm the CV attachment first.")
+                else:
+                    try:
+                        result = execute_once(
+                            f"cv-attach:{selected_application}:{selected_artifact}",
+                            lambda: context.actions.attach_cv_artifact(
+                                str(application["job_id"]),
+                                profile_id,
+                                selected_artifact,
+                                note=note or None,
+                            ),
+                        )
+                        if result:
+                            st.success("CV attached and application marked cv_ready.")
+                    except Exception as error:
+                        safe_error(error)
+    else:
+        st.info("Manual-JD artifacts are not linked to a stored job application.")
 
 
 def _cv_result(result):

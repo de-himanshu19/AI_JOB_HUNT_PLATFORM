@@ -10,7 +10,7 @@ from app.dashboard.actions import ConfirmationRequired, DashboardActions
 from app.db.connection import Database
 from app.db.migrations import migrate
 from app.db.repositories import CandidateProfileRepository, JobRepository
-from app.db.repositories import JobDescriptionRepository
+from app.db.repositories import ApplicationRepository, JobDescriptionRepository
 from app.domain.enums import ApplicationStatus, DescriptionCompleteness, JobSource
 from app.domain.job import Job, JobDescription
 from app.services.applications import InvalidStatusTransition
@@ -125,6 +125,35 @@ def test_cv_actions_preserve_rule_based_cache_and_manual_provenance(tmp_path) ->
     assert repeated.rule_based_artifact.id == first.rule_based_artifact.id
     assert manual.rule_based_artifact.job_id is None
     assert manual.rule_based_artifact.artifact_path.is_file()
+
+
+def test_attach_cv_action_delegates_to_application_service(tmp_path) -> None:
+    settings, database, profile, job = _context(tmp_path)
+    text = (ROOT / "tests/fixtures/fit_analysis/full_data_analyst.txt").read_text(
+        encoding="utf-8"
+    )
+    with database.transaction() as connection:
+        JobDescriptionRepository(connection).create(JobDescription(
+            job_id=job.id, raw_text=text, normalized_text=text,
+            completeness=DescriptionCompleteness.FULL, content_hash="e" * 64,
+        ))
+    actions = DashboardActions(database, settings)
+    artifact = actions.generate_cv(job.id, profile.id).rule_based_artifact
+    tracked, _ = actions.start_tracking(job.id, profile.id)
+
+    ready = actions.attach_cv_artifact(
+        job.id,
+        profile.id,
+        artifact.id,
+        note="CV reviewed in dashboard",
+    )
+
+    assert ready.id == tracked.id
+    assert ready.status is ApplicationStatus.CV_READY
+    assert str(ready.cv_artifact_id) == str(artifact.id)
+    with database.read_connection() as connection:
+        stored = ApplicationRepository(connection).get(tracked.id)
+        assert stored.status is ApplicationStatus.CV_READY
 
 
 def test_notification_preview_is_offline_and_does_not_create_batches(tmp_path) -> None:

@@ -136,6 +136,14 @@ External credential rotation remains a manual security gate. No credential value
 - CV generation can opt in to `--mark-cv-ready`; without that flag it still has no application-status side effect.
 - Dashboard Applications page shows CRM counts, due follow-ups, score context, notes preview, and confirmation-gated actions.
 
+### Migration Milestone 12
+
+- Dashboard CV Workflow page lists generated CV artifacts with job/profile/application context.
+- Selected artifacts expose copy-friendly FlowCV TXT content and private evidence reports only after explicit dashboard selection.
+- CV artifact reads use stored artifact paths only and handle missing local files gracefully.
+- Dashboard and CLI workflows can attach a reviewed CV artifact to application tracking and mark the application `cv_ready`.
+- `cv list` supports profile/job filtering, and `cv show` remains metadata-only unless `--text` or `--evidence` is explicitly requested.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -169,6 +177,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 9: `app/domain/legacy_import.py`, `app/services/legacy_import.py`, `migrations/007_legacy_import.sql`, legacy import CLI commands, focused tests, and `docs/LEGACY_IMPORT.md`.
 - Milestone 10: `app/services/pipeline.py`, pipeline CLI command, pipeline tests, and `docs/PIPELINE.md`.
 - Milestone 11: application tracking migration/service/repository/CLI/dashboard extensions, focused CRM tests, and `docs/APPLICATION_TRACKING.md`.
+- Milestone 12: CV workflow dashboard/query/action extensions, CV artifact CLI improvements, focused tests, and `docs/CV_WORKFLOW.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

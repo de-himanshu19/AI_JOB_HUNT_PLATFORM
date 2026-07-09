@@ -10,14 +10,20 @@ network connection in normal operation.
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
 python -m app.cli cv generate-manual --description-file <path> --profile-id <profile-id>
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id> --force-regenerate
+python -m app.cli cv list --profile-id <profile-id>
 python -m app.cli cv list --job-id <job-id>
-python -m app.cli cv show <artifact-id>
+python -m app.cli cv show --artifact-id <artifact-id>
+python -m app.cli cv show --artifact-id <artifact-id> --text
+python -m app.cli cv show --artifact-id <artifact-id> --evidence
 ```
 
 Stored-job generation accepts only the latest `full` description. Snippet and
 missing descriptions fail with guidance to use the manual command. Manual input
 is UTF-8 `.txt` or `.md`, bounded by `CV_MANUAL_MAX_BYTES`, hashed by content,
 and recorded with no job, description-row, cluster, or stored-analysis ID.
+`cv show` prints metadata by default; full CV text and private evidence reports
+require explicit flags. See [CV workflow](CV_WORKFLOW.md) for dashboard copy and
+application-attachment steps.
 
 ## Authority and evidence
 

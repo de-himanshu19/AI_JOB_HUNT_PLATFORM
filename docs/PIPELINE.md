@@ -93,4 +93,9 @@ python -m app.cli applications shortlist --profile-id <PROFILE_ID> --job-id <JOB
 python -m app.dashboard
 python -m app.cli applications shortlist --profile-id <PROFILE_ID> --job-id <JOB_ID> --priority high
 python -m app.cli cv generate --job-id <JOB_ID> --profile-id <PROFILE_ID> --force-regenerate
+python -m app.cli cv list --profile-id <PROFILE_ID>
 ```
+
+Use the dashboard CV Workflow page or `cv show --text` to copy FlowCV content,
+then attach the reviewed artifact with `applications cv-ready` or
+`applications attach-cv`.

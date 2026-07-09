@@ -53,6 +53,7 @@ Link a CV artifact and mark it ready:
 
 ```powershell
 python -m app.cli applications cv-ready --profile-id <PROFILE_ID> --job-id <JOB_ID> --cv-artifact-id <ARTIFACT_ID> --note "FlowCV exported"
+python -m app.cli applications attach-cv --profile-id <PROFILE_ID> --job-id <JOB_ID> --cv-artifact-id <ARTIFACT_ID> --note "FlowCV reviewed"
 ```
 
 Set a follow-up:
@@ -82,6 +83,9 @@ python -m app.cli cv generate --job-id <JOB_ID> --profile-id <PROFILE_ID> --forc
 ```
 
 Without `--mark-cv-ready`, CV generation does not change application status.
+The dashboard **CV Workflow** page can list generated artifacts, preview/copy
+FlowCV text, explicitly reveal evidence reports, and attach a reviewed artifact
+to a tracked application.
 
 ## Dashboard
 
@@ -98,3 +102,5 @@ application service.
 4. Mark the CV ready only after review/export.
 5. Mark applied after submitting manually on the employer site.
 6. Set follow-up dates and review `applications due` daily.
+
+See [the CV workflow guide](CV_WORKFLOW.md) for artifact preview and copy steps.

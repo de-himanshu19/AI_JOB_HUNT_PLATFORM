@@ -36,7 +36,7 @@ def main() -> None:
         ],
         "Prepare": [
             st.Page(applications_page, title="Applications", url_path="applications"),
-            st.Page(cv_builder_page, title="CV Builder", url_path="cv-builder"),
+            st.Page(cv_builder_page, title="CV Workflow", url_path="cv-builder"),
             st.Page(notifications_page, title="Notifications", url_path="notifications"),
         ],
         "Operate": [
@@ -44,4 +44,3 @@ def main() -> None:
         ],
     }
     st.navigation(pages, position="sidebar").run()
-

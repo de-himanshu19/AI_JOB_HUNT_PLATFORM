@@ -1210,17 +1210,26 @@ class CVGenerationArtifactRepository:
         ).fetchone()
         return self._from_row(row) if row else None
 
-    def list(self, *, job_id: UUID | str | None = None) -> list[CVGenerationArtifact]:
-        if job_id is None:
-            rows = self.connection.execute(
-                "SELECT * FROM cv_generation_artifacts ORDER BY created_at DESC, id"
-            ).fetchall()
-        else:
-            rows = self.connection.execute(
-                """SELECT * FROM cv_generation_artifacts WHERE job_id = ?
-                ORDER BY created_at DESC, id""",
-                (str(job_id),),
-            ).fetchall()
+    def list(
+        self,
+        *,
+        profile_id: UUID | str | None = None,
+        job_id: UUID | str | None = None,
+    ) -> list[CVGenerationArtifact]:
+        clauses = []
+        parameters: list[object] = []
+        if profile_id is not None:
+            clauses.append("profile_id = ?")
+            parameters.append(str(profile_id))
+        if job_id is not None:
+            clauses.append("job_id = ?")
+            parameters.append(str(job_id))
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"""SELECT * FROM cv_generation_artifacts {where}
+            ORDER BY created_at DESC, id""",
+            parameters,
+        ).fetchall()
         return [self._from_row(row) for row in rows]
 
     def create_ai_attempt(self, attempt: CVAIAttempt) -> CVAIAttempt:

@@ -264,9 +264,16 @@ class CVGenerationService:
             build.protected_facts, cache_hit, ai_polish,
         )
 
-    def list_artifacts(self, job_id: UUID | str | None = None):
+    def list_artifacts(
+        self,
+        *,
+        profile_id: UUID | str | None = None,
+        job_id: UUID | str | None = None,
+    ):
         with self.database.read_connection() as connection:
-            return CVGenerationArtifactRepository(connection).list(job_id=job_id)
+            return CVGenerationArtifactRepository(connection).list(
+                profile_id=profile_id, job_id=job_id
+            )
 
     def artifact_details(self, artifact_id: UUID | str):
         with self.database.read_connection() as connection:
@@ -279,6 +286,14 @@ class CVGenerationService:
                 else artifact.parent_rule_based_artifact_id
             )
         return artifact, attempts
+
+    def read_artifact_text(self, artifact_id: UUID | str, *, evidence: bool = False) -> str:
+        artifact, _ = self.artifact_details(artifact_id)
+        path = artifact.evidence_report_path if evidence else artifact.artifact_path
+        if not path.is_file():
+            label = "Evidence report" if evidence else "CV artifact"
+            raise FileNotFoundError(f"{label} file not found: {path}")
+        return path.read_text(encoding="utf-8")
 
     def _identity(self, **values) -> str:
         profile = values.pop("profile")

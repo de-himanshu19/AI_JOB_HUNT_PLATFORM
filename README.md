@@ -214,14 +214,17 @@ Rule-based generation is offline and authoritative:
 ```powershell
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
 python -m app.cli cv generate-manual --description-file <path> --profile-id <profile-id>
+python -m app.cli cv list --profile-id <profile-id>
 python -m app.cli cv list --job-id <job-id>
-python -m app.cli cv show <artifact-id>
+python -m app.cli cv show --artifact-id <artifact-id> --text
 ```
 
 Stored jobs require a full description. Optional Ollama polishing requires both
 `--ai-polish` and `--live-ai`; failures retain the rule-based artifact. See
 [the CV generation guide](docs/CV_GENERATION.md) for provenance, validation,
-cache identity, and artifact-security details.
+cache identity, and artifact-security details. See
+[the CV workflow guide](docs/CV_WORKFLOW.md) for dashboard preview, copy, and
+application attachment steps.
 
 ## Import legacy local files
 
