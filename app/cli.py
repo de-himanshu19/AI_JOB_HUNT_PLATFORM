@@ -59,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--published-within-days", type=int)
     collect.add_argument("--max-pages", type=int)
     collect.add_argument("--page-size", type=int)
+    collect.add_argument("--max-detail-requests", type=int)
     mode = collect.add_mutually_exclusive_group()
     mode.add_argument(
         "--dry-run",
@@ -340,6 +341,20 @@ def _description_completeness_counts(result) -> dict[str, int]:
     return {key: counts.get(key, 0) for key in ("full", "snippet", "missing")}
 
 
+def _collection_diagnostics(result) -> dict[str, int]:
+    counts = _description_completeness_counts(result)
+    return {
+        "detail_requests_attempted": result.detail_requests_attempted,
+        "detail_requests_succeeded": result.detail_requests_succeeded,
+        "detail_requests_failed": result.detail_requests_failed,
+        "full_descriptions": counts["full"],
+        "snippet_descriptions": counts["snippet"],
+        "missing_descriptions": counts["missing"],
+        "external_redirects_seen": result.external_redirects_seen,
+        "parsing_errors": result.parsing_errors,
+    }
+
+
 def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging(settings)
@@ -366,6 +381,7 @@ def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
             if args.page_size is not None
             else settings.arbeitsagentur_page_size
         ),
+        max_detail_requests=args.max_detail_requests,
     )
 
     database = Database.from_settings(settings)
@@ -404,8 +420,7 @@ def _collect_arbeitsagentur(args: argparse.Namespace) -> int:
                 "repeated_pages": result.repeated_pages,
                 "search_requests_succeeded": result.search_requests_succeeded,
                 "search_requests_failed": result.search_requests_failed,
-                "detail_requests_succeeded": result.detail_requests_succeeded,
-                "detail_requests_failed": result.detail_requests_failed,
+                **_collection_diagnostics(result),
                 "errors": [error.model_dump(mode="json") for error in result.errors],
                 "database_modified": is_live,
             },
@@ -443,6 +458,7 @@ def _collect_englishjobs(args: argparse.Namespace) -> int:
             if args.page_size is not None
             else settings.englishjobs_page_size
         ),
+        max_detail_requests=args.max_detail_requests,
     )
 
     database = Database.from_settings(settings)
@@ -484,8 +500,7 @@ def _collect_englishjobs(args: argparse.Namespace) -> int:
                 "repeated_pages": result.repeated_pages,
                 "search_requests_succeeded": result.search_requests_succeeded,
                 "search_requests_failed": result.search_requests_failed,
-                "detail_requests_succeeded": result.detail_requests_succeeded,
-                "detail_requests_failed": result.detail_requests_failed,
+                **_collection_diagnostics(result),
                 "errors": [error.model_dump(mode="json") for error in result.errors],
                 "database_modified": is_live,
             },

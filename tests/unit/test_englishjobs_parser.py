@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.sources.englishjobs.parser import (
     extract_total_jobs_count,
+    is_full_description_text,
     parse_job_detail,
     parse_search_page,
 )
@@ -63,6 +64,42 @@ def test_parse_full_job_detail():
     )
     assert "Full EnglishJobs description" in detail.description
     assert detail.canonical_url == "https://englishjobs.de/jobs/internal-100"
+    assert detail.structured_data["detail_description_quality"] == "full"
+    assert detail.structured_data["detail_keyword_hits"] >= 2
+
+
+def test_detail_page_with_metadata_only_is_not_full():
+    detail = parse_job_detail(
+        """
+        <html><body><main>
+          <h1>Data Analyst</h1>
+          <div class="company">Example GmbH</div>
+          <div class="location">Berlin</div>
+          <p>Apply now to continue to the company career page.</p>
+        </main></body></html>
+        """,
+        source_url="https://englishjobs.de/jobs/internal-apply",
+        final_url="https://englishjobs.de/jobs/internal-apply",
+    )
+
+    assert detail.description is None
+    assert detail.structured_data["detail_description_quality"] == "not_full"
+
+
+def test_full_description_heuristic_rejects_short_snippets_and_repeated_boilerplate():
+    assert not is_full_description_text(
+        "Responsibilities include SQL reporting.",
+        title="Data Analyst",
+        company="Example GmbH",
+        location="Berlin",
+    )
+    repeated = "Responsibilities requirements benefits role tasks. " * 80
+    assert not is_full_description_text(
+        repeated,
+        title="Data Analyst",
+        company="Example GmbH",
+        location="Berlin",
+    )
 
 
 def test_missing_next_link_keeps_pagination_state_unknown():

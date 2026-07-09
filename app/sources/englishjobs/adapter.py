@@ -147,7 +147,16 @@ class EnglishJobsAdapter:
             )
 
         for record in records.values():
-            details = self._fetch_details(record, result)
+            details = None
+            if (
+                request.max_detail_requests is None
+                or result.detail_requests_attempted < request.max_detail_requests
+            ):
+                details = self._fetch_details(
+                    record,
+                    result,
+                    max_detail_requests=request.max_detail_requests,
+                )
             result.jobs.append(self.to_job(record, details))
 
         if result.search_requests_succeeded == 0 and result.errors:
@@ -165,7 +174,11 @@ class EnglishJobsAdapter:
         record: RawEnglishJobsRecord,
         details: RawEnglishJobsDetails | None = None,
     ) -> CollectedJob:
-        if details and details.description and len(details.description.strip()) >= 40:
+        if (
+            details
+            and details.description
+            and details.structured_data.get("detail_description_quality") == "full"
+        ):
             description_text = details.description
             completeness = DescriptionCompleteness.FULL
         elif record.description_snippet:
@@ -188,11 +201,20 @@ class EnglishJobsAdapter:
             source_job_id=self._source_identity(record),
             source_url=source_url,
             canonical_url=canonical_url,
-            title_raw=record.title,
-            title_normalized=_normalized(record.title) or "untitled vacancy",
-            company_raw=record.company,
-            company_normalized=_normalized(record.company),
-            location_raw=record.location_raw,
+            title_raw=(details.title if details and details.title else record.title),
+            title_normalized=(
+                _normalized(details.title if details and details.title else record.title)
+                or "untitled vacancy"
+            ),
+            company_raw=details.company if details and details.company else record.company,
+            company_normalized=_normalized(
+                details.company if details and details.company else record.company
+            ),
+            location_raw=(
+                details.location_raw
+                if details and details.location_raw
+                else record.location_raw
+            ),
             city=record.city,
             region=record.state_display,
             country="Germany",
@@ -277,6 +299,7 @@ class EnglishJobsAdapter:
             result.jobs_parsed += len(page.records)
             result.invalid_cards += page.invalid_cards
             for record_error in page.record_errors:
+                result.parsing_errors += 1
                 result.errors.append(
                     CollectionError(
                         operation="search_parse",
@@ -317,9 +340,12 @@ class EnglishJobsAdapter:
         self,
         record: RawEnglishJobsRecord,
         result: CollectionResult,
+        *,
+        max_detail_requests: int | None,
     ) -> RawEnglishJobsDetails | None:
         if record.listing_url and not is_clickout_url(record.listing_url):
             try:
+                result.detail_requests_attempted += 1
                 document = self.client.fetch_document(
                     record.listing_url,
                     operation="detail",
@@ -340,8 +366,15 @@ class EnglishJobsAdapter:
                     source_url=record.listing_url,
                     final_url=document.final_url,
                 )
-        if record.clickout_url:
+        if (
+            record.clickout_url
+            and (
+                max_detail_requests is None
+                or result.detail_requests_attempted < max_detail_requests
+            )
+        ):
             try:
+                result.detail_requests_attempted += 1
                 document = self.client.fetch_document(
                     record.clickout_url,
                     operation="clickout",
@@ -357,11 +390,16 @@ class EnglishJobsAdapter:
                 )
             else:
                 result.detail_requests_succeeded += 1
+                result.external_redirects_seen += 1
                 return RawEnglishJobsDetails(
                     description=None,
                     canonical_url=document.final_url,
                     final_url=document.final_url,
-                    structured_data={"clickout_resolved": True},
+                    structured_data={
+                        "clickout_resolved": True,
+                        "external_apply_url": document.final_url,
+                        "detail_description_quality": "not_full",
+                    },
                 )
         return None
 

@@ -52,9 +52,18 @@ not a commitment to implement future items automatically.
 - Demo, architecture, safety, and roadmap docs.
 - Screenshot placeholders without committing private images.
 
+### M15: EnglishJobs Full-Description Extraction
+
+- Safer EnglishJobs-hosted detail-page parsing.
+- Strict full-description quality heuristics.
+- External clickout/apply-only pages remain snippet-level.
+- Collection and pipeline diagnostics include detail request and completeness
+  counters.
+
 ## Planned
 
-- Improve EnglishJobs full-description extraction where safe and permitted.
+- Continue improving EnglishJobs full-description extraction where safe and
+  permitted.
 - Add a local scheduler for recurring pipeline runs.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the shared adapter contract.

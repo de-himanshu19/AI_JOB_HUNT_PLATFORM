@@ -12,8 +12,10 @@ from app.config import settings_from_mapping
 from app.db.connection import Database
 from app.db.migrations import migrate
 from app.domain.enums import DescriptionCompleteness, JobSource
+from app.domain.job import Job, JobDescription
 from app.services.applications import ApplicationService
 from app.services.pipeline import PipelineRunRequest, PipelineService
+from app.sources.base import CollectedJob, CollectionResult, SourceRunStatus
 
 from tests.integration.test_fit_analysis_persistence import (
     _description,
@@ -166,6 +168,68 @@ def test_pipeline_cli_writes_output_and_parses_comma_sources(
         for value in summary["collection"].values()
     )
     assert output.is_file()
+
+
+def test_pipeline_englishjobs_live_collect_summary_includes_detail_diagnostics(
+    tmp_path,
+) -> None:
+    settings, database, _ = _service(tmp_path)
+    profile, _ = _seed_stored_job(database)
+
+    class FakeEnglishJobsCollector:
+        def collect(self, request):
+            job = Job(
+                source=JobSource.ENGLISHJOBS,
+                source_job_id="pipeline-englishjobs-detail",
+                title_raw="Data Analyst",
+                title_normalized="data analyst",
+                company_raw="Insight GmbH",
+                company_normalized="insight gmbh",
+                location_raw="Berlin",
+            )
+            description = JobDescription(
+                job_id=job.id,
+                raw_text="SQL reporting responsibilities requirements benefits " * 30,
+                normalized_text="SQL reporting responsibilities requirements benefits " * 30,
+                completeness=DescriptionCompleteness.FULL,
+                content_hash="d" * 64,
+            )
+            return CollectionResult(
+                jobs=[CollectedJob(job=job, description=description)],
+                jobs_parsed=1,
+                search_requests_succeeded=1,
+                detail_requests_attempted=1,
+                detail_requests_succeeded=1,
+                external_redirects_seen=0,
+                status=SourceRunStatus.COMPLETED,
+            )
+
+    def collector_factory(source):
+        assert source is JobSource.ENGLISHJOBS
+        return FakeEnglishJobsCollector()
+
+    service = PipelineService(
+        database,
+        settings,
+        _rules(),
+        collector_factory=collector_factory,
+        now=lambda: datetime(2026, 7, 9, 10, 0, tzinfo=UTC),
+    )
+    summary = service.run(PipelineRunRequest(
+        profile_id=profile.id,
+        sources=(JobSource.ENGLISHJOBS,),
+        live_collect=True,
+    ))
+
+    collection = summary["collection"]["englishjobs"]
+    assert collection["status"] == "completed"
+    assert collection["jobs_collected"] == 1
+    assert collection["full_descriptions"] == 1
+    assert collection["detail_requests_attempted"] == 1
+    assert collection["detail_requests_succeeded"] == 1
+    assert collection["detail_requests_failed"] == 0
+    assert collection["parsing_errors"] == 0
+    assert summary["top_jobs"][0]["application_status"] is None
 
 
 def test_pipeline_source_parser_rejects_invalid_source() -> None:

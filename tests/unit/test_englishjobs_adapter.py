@@ -44,12 +44,38 @@ QUERY_PAGE = """
 
 DETAIL_FULL = """
 <html><head><link rel="canonical" href="https://englishjobs.de/jobs/internal-100"/></head>
-<body><div class="job-description">This is a complete description with enough detail to count as full text for the saved job record.</div></body></html>
+<body><main><h1>Data Analyst</h1><div class="company">Insight GmbH</div><div class="location">Munich, Bayern</div>
+<div class="job-description">
+Full EnglishJobs description for a Data Analyst role. Responsibilities include
+building SQL reporting workflows, validating source data, reconciling records,
+maintaining Excel checks, preparing Power BI inputs, and documenting recurring
+KPI outputs for finance and operations stakeholders. The role works closely
+with business teams to understand requirements, translate questions into
+analysis, and communicate findings clearly.
+
+Your tasks include improving data quality, reviewing dashboard inputs,
+supporting monthly reporting, tracking process exceptions, and preparing
+structured summaries for decision makers. Requirements include practical SQL
+experience, strong Excel skills, careful validation habits, and the ability to
+explain data issues to non-technical colleagues.
+
+Qualifications in data analytics, business reporting, information systems, or a
+related field are helpful. The successful candidate profile combines curiosity,
+attention to detail, stakeholder coordination, and reliable documentation. The
+team offers benefits including hybrid work options, learning opportunities,
+collaboration with international colleagues, and exposure to reporting projects
+that improve real business processes.
+</div></main></body></html>
 """
 
 DETAIL_SHORT = """
 <html><head><link rel="canonical" href="https://englishjobs.de/jobs/internal-200"/></head>
 <body><div class="job-description">Short text</div></body></html>
+"""
+
+DETAIL_APPLY_ONLY = """
+<html><head><link rel="canonical" href="https://englishjobs.de/jobs/internal-200"/></head>
+<body><main><h1>Senior Data Analyst</h1><p>Apply now to continue to the company career page.</p></main></body></html>
 """
 
 
@@ -117,6 +143,10 @@ def test_state_and_query_collection_deduplicates_and_merges_provenance(adapter_s
     }
     assert completeness["listing_id:listing-100"] is DescriptionCompleteness.FULL
     assert completeness["listing_id:listing-200"] is DescriptionCompleteness.SNIPPET
+    assert result.detail_requests_attempted == 3
+    assert result.detail_requests_succeeded == 3
+    assert result.detail_requests_failed == 0
+    assert result.external_redirects_seen == 1
 
 
 def test_failed_middle_page_keeps_jobs_and_continues(adapter_settings):
@@ -180,6 +210,100 @@ def test_clickout_resolution_keeps_snippet_when_no_full_detail(adapter_settings)
     assert by_id["listing_id:listing-300"].job.canonical_url == (
         "https://company.example/jobs/operations-analyst"
     )
+    assert result.external_redirects_seen == 1
+
+
+def test_apply_only_detail_page_is_not_marked_full(adapter_settings):
+    client = FakeClient(
+        query_pages={("Data Analyst", "Germany", 1): QUERY_PAGE},
+        documents={
+            "https://englishjobs.de/jobs/internal-100": (
+                DETAIL_FULL,
+                "https://englishjobs.de/jobs/internal-100",
+            ),
+            "https://englishjobs.de/jobs/internal-200": (
+                DETAIL_APPLY_ONLY,
+                "https://englishjobs.de/jobs/internal-200",
+            ),
+        },
+    )
+    result = EnglishJobsAdapter(adapter_settings, client).collect(
+        CollectionRequest(
+            queries=("Data Analyst",),
+            location="Germany",
+            max_pages=1,
+            page_size=20,
+        )
+    )
+
+    by_id = {item.job.source_job_id: item for item in result.jobs}
+    assert by_id["listing_id:listing-100"].description.completeness is DescriptionCompleteness.FULL
+    assert by_id["listing_id:listing-200"].description.completeness is DescriptionCompleteness.SNIPPET
+    assert "Snippet two" in (by_id["listing_id:listing-200"].description.raw_text or "")
+
+
+def test_detail_failure_keeps_collection_and_falls_back_to_snippet(adapter_settings):
+    client = FakeClient(
+        query_pages={("Data Analyst", "Germany", 1): QUERY_PAGE},
+        documents={
+            "https://englishjobs.de/jobs/internal-100": EnglishJobsClientError(
+                "detail timeout",
+                retriable=True,
+            ),
+            "https://englishjobs.de/jobs/internal-200": (
+                DETAIL_SHORT,
+                "https://englishjobs.de/jobs/internal-200",
+            ),
+        },
+    )
+    result = EnglishJobsAdapter(adapter_settings, client).collect(
+        CollectionRequest(
+            queries=("Data Analyst",),
+            location="Germany",
+            max_pages=1,
+            page_size=20,
+        )
+    )
+
+    by_id = {item.job.source_job_id: item for item in result.jobs}
+    assert result.status is SourceRunStatus.COMPLETED_WITH_ERRORS
+    assert result.detail_requests_attempted == 2
+    assert result.detail_requests_failed == 1
+    assert by_id["listing_id:listing-100"].description.completeness is DescriptionCompleteness.SNIPPET
+    assert by_id["listing_id:listing-200"].description.completeness is DescriptionCompleteness.SNIPPET
+
+
+def test_max_detail_requests_bounds_detail_fetching(adapter_settings):
+    client = FakeClient(
+        query_pages={("Data Analyst", "Germany", 1): QUERY_PAGE},
+        documents={
+            "https://englishjobs.de/jobs/internal-100": (
+                DETAIL_FULL,
+                "https://englishjobs.de/jobs/internal-100",
+            ),
+            "https://englishjobs.de/jobs/internal-200": (
+                DETAIL_FULL,
+                "https://englishjobs.de/jobs/internal-200",
+            ),
+        },
+    )
+    result = EnglishJobsAdapter(adapter_settings, client).collect(
+        CollectionRequest(
+            queries=("Data Analyst",),
+            location="Germany",
+            max_pages=1,
+            page_size=20,
+            max_detail_requests=1,
+        )
+    )
+
+    by_id = {item.job.source_job_id: item for item in result.jobs}
+    assert result.detail_requests_attempted == 1
+    assert client.detail_calls == [
+        ("detail", "https://englishjobs.de/jobs/internal-100")
+    ]
+    assert by_id["listing_id:listing-100"].description.completeness is DescriptionCompleteness.FULL
+    assert by_id["listing_id:listing-200"].description.completeness is DescriptionCompleteness.SNIPPET
 
 
 def test_total_count_can_drive_second_page_without_next_link(adapter_settings):

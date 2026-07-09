@@ -170,6 +170,21 @@ External credential rotation remains a manual security gate. No credential value
 - Screenshot placeholders only; no private images, generated CV artifacts,
   runtime data, secrets, or local database content committed.
 
+### Migration Milestone 15
+
+- EnglishJobs detail extraction now applies strict full-description quality
+  checks before marking a description as authoritative `full`.
+- EnglishJobs-hosted detail pages can contribute title/company/location metadata
+  and full body text when the page contains enough meaningful job content.
+- Snippet-only, metadata-only, malformed, redirect, and apply-only detail pages
+  remain `snippet` or `missing`; snippets are never promoted to full.
+- External clickout/apply URLs are recorded as metadata where available, but
+  arbitrary company pages are not broadly scraped.
+- Collection and pipeline summaries include detail attempts, success/failure,
+  completeness counts, external redirect counts, and parsing error counts.
+- Optional `--max-detail-requests` bounds detail fetching for collection demos
+  and diagnostics.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -207,6 +222,8 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 13: OpenAI-compatible and native Ollama Cloud AI providers, protected-fact validation extensions, `cv polish` CLI workflow, focused provider/CV/dashboard/application tests, and AI configuration docs.
 - Milestone 14: portfolio README plus `docs/DEMO.md`,
   `docs/ARCHITECTURE.md`, `docs/SAFETY.md`, and `docs/ROADMAP.md`.
+- Milestone 15: EnglishJobs detail extraction heuristics, bounded detail
+  diagnostics, updated EnglishJobs tests/fixtures, and `docs/SOURCES.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

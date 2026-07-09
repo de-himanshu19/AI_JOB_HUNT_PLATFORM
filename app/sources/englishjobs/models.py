@@ -38,6 +38,9 @@ class RawEnglishJobsRecord(BaseModel):
 class RawEnglishJobsDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    title: str | None = None
+    company: str | None = None
+    location_raw: str | None = None
     description: str | None = None
     canonical_url: str | None = None
     final_url: str | None = None

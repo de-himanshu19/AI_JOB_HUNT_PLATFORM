@@ -26,6 +26,7 @@ class CollectionRequest(BaseModel):
     published_within_days: int = Field(default=7, ge=0, le=365)
     max_pages: int = Field(default=5, ge=1, le=100)
     page_size: int = Field(default=25, ge=1, le=100)
+    max_detail_requests: int | None = Field(default=None, ge=0, le=10000)
 
     @field_validator("queries", "states", mode="before")
     @classmethod
@@ -76,8 +77,11 @@ class CollectionResult(BaseModel):
     repeated_pages: int = 0
     search_requests_succeeded: int = 0
     search_requests_failed: int = 0
+    detail_requests_attempted: int = 0
     detail_requests_succeeded: int = 0
     detail_requests_failed: int = 0
+    external_redirects_seen: int = 0
+    parsing_errors: int = 0
     errors: list[CollectionError] = Field(default_factory=list)
     status: SourceRunStatus = SourceRunStatus.STARTED
 

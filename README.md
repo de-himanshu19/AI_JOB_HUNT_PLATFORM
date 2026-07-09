@@ -225,6 +225,7 @@ ordinary offline verification path.
 - [Demo guide](docs/DEMO.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Safety model](docs/SAFETY.md)
+- [Job sources](docs/SOURCES.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Pipeline](docs/PIPELINE.md)
 - [Dashboard](docs/DASHBOARD.md)
@@ -248,8 +249,8 @@ ordinary offline verification path.
 
 ## Future Roadmap
 
-- Improve EnglishJobs full-description extraction where legally and technically
-  safe.
+- Continue improving EnglishJobs full-description extraction where legally and
+  technically safe.
 - Add a scheduler for local recurring pipeline runs.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the same adapter contract.

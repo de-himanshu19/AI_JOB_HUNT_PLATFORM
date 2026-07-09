@@ -60,6 +60,12 @@ python -m app.cli pipeline run `
 Notification preview remains offline: no Telegram message is sent and no
 notification tables are modified.
 
+For EnglishJobs live collection, the collection summary includes detail-page
+diagnostics such as `detail_requests_attempted`, `full_descriptions`,
+`snippet_descriptions`, `missing_descriptions`, `external_redirects_seen`, and
+`parsing_errors`. Authoritative analysis still depends on descriptions being
+stored as `full`; snippets remain discovery/prefilter-only.
+
 ## Output
 
 The command prints readable JSON and writes the same summary to disk. Use

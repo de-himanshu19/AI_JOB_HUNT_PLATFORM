@@ -142,6 +142,7 @@ class ArbeitsagenturAdapter:
         for summary in summaries.values():
             details: RawJobDetails | None = None
             try:
+                result.detail_requests_attempted += 1
                 detail_payload = self.client.fetch_details(
                     summary.source_job_id, summary.source_detail_url
                 )
@@ -163,6 +164,7 @@ class ArbeitsagenturAdapter:
                         source_url=summary.source_detail_url,
                     )
                 except (SourcePayloadError, ValueError) as error:
+                    result.parsing_errors += 1
                     result.errors.append(
                         self._error(
                             error,

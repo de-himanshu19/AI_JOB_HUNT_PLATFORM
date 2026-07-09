@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, date, datetime
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
@@ -33,6 +34,34 @@ MONTHS = {
     "november": 11,
     "december": 12,
 }
+FULL_DESCRIPTION_MIN_CHARS = 700
+FULL_DESCRIPTION_MIN_KEYWORD_HITS = 2
+JOB_BODY_KEYWORDS = {
+    "responsibilities",
+    "requirements",
+    "qualifications",
+    "benefits",
+    "role",
+    "tasks",
+    "profile",
+    "skills",
+    "experience",
+    "candidate",
+    "team",
+    "about the job",
+    "what you will do",
+    "what we offer",
+    "your profile",
+    "your tasks",
+}
+NON_DESCRIPTION_PATTERNS = (
+    "apply now",
+    "view job",
+    "external application",
+    "redirect",
+    "cookie",
+    "privacy policy",
+)
 
 
 def get_text_or_none(element) -> str | None:
@@ -144,25 +173,97 @@ def parse_job_detail(
         if canonical and canonical.get("href")
         else final_url or source_url
     )
-    description = None
+    _remove_non_body_nodes(soup)
+    title = get_text_or_none(
+        soup.select_one("h1")
+        or soup.select_one("[data-testid='job-title']")
+        or soup.select_one(".job-title")
+    )
+    company = get_text_or_none(
+        soup.select_one("[data-testid='company-name']")
+        or soup.select_one(".company")
+        or soup.select_one(".job-company")
+    )
+    location_raw = get_text_or_none(
+        soup.select_one("[data-testid='job-location']")
+        or soup.select_one(".location")
+        or soup.select_one(".job-location")
+    )
+    best_text = None
     for selector in (
         "div.job-description",
         "section.job-description",
         "article.job-description",
+        "[data-testid='job-description']",
+        ".job-detail .description",
+        ".job-posting",
+        ".job__description",
+        ".job-content",
         "main article",
         "article",
+        "main",
     ):
         node = soup.select_one(selector)
         text = _clean_description_text(get_text_or_none(node))
-        if text and len(text) >= 80:
-            description = text
+        if text and (best_text is None or len(text) > len(best_text)):
+            best_text = text
+        if is_full_description_text(text, title=title, company=company, location=location_raw):
+            best_text = text
             break
+    description = (
+        best_text
+        if is_full_description_text(
+            best_text,
+            title=title,
+            company=company,
+            location=location_raw,
+        )
+        else None
+    )
+    keyword_hits = _job_keyword_hits(best_text)
     return RawEnglishJobsDetails(
+        title=title,
+        company=company,
+        location_raw=location_raw,
         description=description,
         canonical_url=canonical_url,
         final_url=final_url or source_url,
-        structured_data={},
+        structured_data={
+            "detail_description_length": len(best_text or ""),
+            "detail_keyword_hits": keyword_hits,
+            "detail_description_quality": "full" if description else "not_full",
+            "detail_external_final_url": _is_external(source_url, final_url),
+        },
     )
+
+
+def is_full_description_text(
+    text: str | None,
+    *,
+    title: str | None = None,
+    company: str | None = None,
+    location: str | None = None,
+) -> bool:
+    if not text:
+        return False
+    cleaned = _clean_description_text(text)
+    if not cleaned or len(cleaned) < FULL_DESCRIPTION_MIN_CHARS:
+        return False
+    lowered = cleaned.casefold()
+    keyword_hits = _job_keyword_hits(cleaned)
+    if (
+        any(pattern in lowered for pattern in NON_DESCRIPTION_PATTERNS)
+        and keyword_hits < FULL_DESCRIPTION_MIN_KEYWORD_HITS
+    ):
+        return False
+    metadata = " ".join(
+        value for value in (title, company, location) if value
+    ).casefold()
+    if metadata and _without_metadata_words(lowered, metadata) < FULL_DESCRIPTION_MIN_CHARS:
+        return False
+    if _repetition_ratio(cleaned) > 0.45:
+        return False
+    return keyword_hits >= FULL_DESCRIPTION_MIN_KEYWORD_HITS
 
 
 def _parse_card(
@@ -277,3 +378,45 @@ def _clean_description_text(value: str | None) -> str | None:
         return None
     cleaned = re.sub(r"\s+", " ", value).strip()
     return cleaned or None
+
+
+def _remove_non_body_nodes(soup: BeautifulSoup) -> None:
+    for node in soup.select(
+        "script, style, noscript, nav, footer, header, aside, form, "
+        ".cookie, .cookies, .cookie-banner, .footer, .navbar, .navigation"
+    ):
+        node.decompose()
+
+
+def _job_keyword_hits(text: str | None) -> int:
+    if not text:
+        return 0
+    lowered = text.casefold()
+    return sum(1 for keyword in JOB_BODY_KEYWORDS if keyword in lowered)
+
+
+def _repetition_ratio(text: str) -> float:
+    words = re.findall(r"[A-Za-z]{3,}", text.casefold())
+    if not words:
+        return 1.0
+    unique = len(set(words))
+    return 1 - (unique / len(words))
+
+
+def _without_metadata_words(text: str, metadata: str) -> int:
+    metadata_words = {
+        word for word in re.findall(r"[A-Za-z0-9+.-]{3,}", metadata)
+    }
+    body_words = [
+        word for word in re.findall(r"[A-Za-z0-9+.-]{3,}", text)
+        if word not in metadata_words
+    ]
+    return len(" ".join(body_words))
+
+
+def _is_external(source_url: str, final_url: str | None) -> bool:
+    if not final_url:
+        return False
+    source_host = urlparse(source_url).netloc.casefold()
+    final_host = urlparse(final_url).netloc.casefold()
+    return bool(source_host and final_host and source_host != final_host)

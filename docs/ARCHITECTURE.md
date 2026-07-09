@@ -69,10 +69,12 @@ Source adapters implement a shared collection contract:
 
 - Arbeitsagentur uses bounded search/detail requests with fixture-backed tests.
 - EnglishJobs supports state and keyword/location flows with conservative
-  description completeness handling.
+  description completeness handling and safe EnglishJobs-hosted detail-page
+  extraction where enough meaningful job-body text is available.
 
 Adapters normalize raw source payloads into typed summary/detail records. Tests
 use fixtures and injected clients; live source requests require explicit opt-in.
+External company pages are not broadly scraped by the EnglishJobs adapter.
 
 ## Dashboard
 

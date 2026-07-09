@@ -103,6 +103,11 @@ def test_cli_fixture_dry_run_is_safe(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert output["mode"] == "dry-run"
     assert output["jobs_collected"] == 2
+    assert output["full_descriptions"] == 1
+    assert output["snippet_descriptions"] == 1
+    assert output["missing_descriptions"] == 0
+    assert output["detail_requests_attempted"] == 2
+    assert output["external_redirects_seen"] == 1
     assert output["database_modified"] is False
     assert not settings.database_path.exists()
 
@@ -130,5 +135,9 @@ def test_cli_fixture_query_dry_run_is_safe(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert output["mode"] == "dry-run"
     assert output["jobs_collected"] == 2
+    assert output["full_descriptions"] == 1
+    assert output["snippet_descriptions"] == 1
+    assert output["missing_descriptions"] == 0
+    assert output["detail_requests_attempted"] == 2
     assert output["database_modified"] is False
     assert not settings.database_path.exists()

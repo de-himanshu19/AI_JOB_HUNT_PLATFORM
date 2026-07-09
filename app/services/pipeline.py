@@ -141,6 +141,11 @@ class PipelineService:
                     "snippet_descriptions": counts["snippet"],
                     "missing_descriptions": counts["missing"],
                     "jobs_collected": len(report.source_result.jobs),
+                    "detail_requests_attempted": report.source_result.detail_requests_attempted,
+                    "detail_requests_succeeded": report.source_result.detail_requests_succeeded,
+                    "detail_requests_failed": report.source_result.detail_requests_failed,
+                    "external_redirects_seen": report.source_result.external_redirects_seen,
+                    "parsing_errors": report.source_result.parsing_errors,
                     "errors": [
                         error.model_dump(mode="json")
                         for error in report.source_result.errors
