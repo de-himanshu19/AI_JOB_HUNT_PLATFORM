@@ -24,8 +24,11 @@ python -m app.cli cv generate-manual --description-file <path> --profile-id <PRO
 ```
 
 Optional API polish can be requested during generation only when the user has
-configured `AI_ENABLED=true`, `AI_PROVIDER=openai_compatible`, and
-`AI_API_KEY` locally:
+configured `AI_ENABLED=true`, a supported provider, and `AI_API_KEY` locally.
+Use `AI_PROVIDER=openai_compatible` for chat-completions APIs, or
+`AI_PROVIDER=ollama_cloud` with `AI_BASE_URL=https://ollama.com` and
+`AI_MODEL=gpt-oss:20b` for native Ollama Cloud. For Ollama Cloud CV polish,
+prefer `gpt-oss:20b`, not `gpt-oss-safeguard`:
 
 ```powershell
 python -m app.cli cv generate --job-id <JOB_ID> --profile-id <PROFILE_ID> --force-regenerate --ai-polish --live-ai
@@ -39,7 +42,12 @@ python -m app.cli cv polish --artifact-id <RULE_BASED_ARTIFACT_ID> --live-ai
 
 This sends CV text to the configured external AI API. The rule-based artifact
 remains authoritative, and AI output is stored only as a separate validated
-child artifact.
+child artifact. `validation_failed` is expected and safe if the model changes
+facts, translates content, removes required FlowCV sections, or adds unsupported
+claims.
+Safe polish mode is intentionally narrow: locked fact-bearing sections are
+restored from the rule-based artifact, while only summary and safe key-skill
+wording may remain AI-polished.
 
 ## List Artifacts
 

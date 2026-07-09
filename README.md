@@ -220,13 +220,19 @@ python -m app.cli cv show --artifact-id <artifact-id> --text
 ```
 
 Stored jobs require a full description. Optional API-based AI polishing requires
-`AI_ENABLED=true`, `AI_PROVIDER=openai_compatible`, a user-provided
-`AI_API_KEY`, and both `--ai-polish` and `--live-ai`; failures retain the
-rule-based artifact. See
+`AI_ENABLED=true`, `AI_PROVIDER=openai_compatible` or `ollama_cloud`, a
+user-provided `AI_API_KEY`, and both `--ai-polish` and `--live-ai`; failures
+retain the rule-based artifact. Use `AI_PROVIDER=ollama_cloud`,
+`AI_BASE_URL=https://ollama.com`, and `AI_MODEL=gpt-oss:20b` for native Ollama
+Cloud. See
 [the CV generation guide](docs/CV_GENERATION.md) for provenance, validation,
 cache identity, and artifact-security details. See
 [the CV workflow guide](docs/CV_WORKFLOW.md) for dashboard preview, copy, and
 application attachment steps.
+AI polish is conservative: `validation_failed` is expected and safe if a model
+changes facts, translates content, removes FlowCV sections, or adds unsupported
+claims. Safe polish mode restores locked fact-bearing sections from the
+rule-based artifact before storing any AI child artifact.
 
 ## Import legacy local files
 

@@ -205,7 +205,7 @@ class Settings(BaseModel):
             raise ValueError(
                 "Telegram credentials are required only when TELEGRAM_ENABLED=true"
             )
-        allowed_ai = {"rule_based", "openai_compatible"}
+        allowed_ai = {"rule_based", "openai_compatible", "ollama_cloud"}
         if self.ai_provider not in allowed_ai:
             raise ValueError(f"AI_PROVIDER must be one of {sorted(allowed_ai)}")
         if not self.arbeitsagentur_queries:

@@ -54,6 +54,20 @@ from app.services.requirements import RequirementsAnalyzer
 
 
 PROMPT_VERSION = "m13-cv-polish-v1"
+REQUIRED_FLOWCV_HEADINGS = (
+    "CANDIDATE HEADER",
+    "PROFESSIONAL HEADLINE",
+    "PROFESSIONAL SUMMARY",
+    "ACHIEVEMENTS",
+    "KEY SKILLS",
+    "PROFESSIONAL EXPERIENCE",
+    "PROJECTS",
+    "CERTIFICATIONS AND COURSES",
+    "EDUCATION",
+    "LANGUAGES",
+    "ADDITIONAL INFORMATION",
+)
+SAFE_POLISH_HEADINGS = frozenset(("PROFESSIONAL SUMMARY", "KEY SKILLS"))
 
 
 def _hash_text(value: str) -> str:
@@ -411,6 +425,8 @@ class CVGenerationService:
             polished = provider.polish(prompt)
             if not isinstance(polished, str):
                 raise ValueError("AI provider returned malformed content")
+            polished = self._clean_ai_output(polished)
+            polished = self._safe_polish_output(polished, rule_text, facts)
             validation = self.validator.validate_ai(polished, rule_text, facts)
             validation_result = self._attempt_result(
                 validation.as_dict(), network_requested=True
@@ -607,18 +623,126 @@ class CVGenerationService:
             raise ValueError("AI polishing requires both --ai-polish and --live-ai")
 
     @staticmethod
+    def _clean_ai_output(text: str) -> str:
+        value = text.strip()
+        lines = value.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            value = "\n".join(lines).strip()
+        return value + "\n" if value else value
+
+    @staticmethod
+    def _safe_polish_output(
+        polished_text: str,
+        rule_text: str,
+        protected_facts: tuple[str, ...],
+    ) -> str:
+        original_sections = CVGenerationService._flowcv_sections(rule_text)
+        polished_sections = dict(CVGenerationService._flowcv_sections(polished_text))
+        if not original_sections:
+            return polished_text
+        if not any(heading in polished_sections for heading in SAFE_POLISH_HEADINGS):
+            return polished_text
+        merged: list[str] = []
+        for heading, original in original_sections:
+            candidate = polished_sections.get(heading)
+            if (
+                heading in SAFE_POLISH_HEADINGS
+                and candidate
+                and CVGenerationService._section_preserves_protected_facts(
+                    original, candidate, protected_facts
+                )
+            ):
+                merged.append(candidate.strip())
+            else:
+                merged.append(original.strip())
+        return "\n\n".join(merged).strip() + "\n"
+
+    @staticmethod
+    def _flowcv_sections(text: str):
+        headings = set(REQUIRED_FLOWCV_HEADINGS)
+        ordered: list[tuple[str, str]] = []
+        current_heading: str | None = None
+        current_lines: list[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped in headings:
+                if current_heading is not None:
+                    ordered.append(
+                        (current_heading, "\n".join(current_lines).strip())
+                    )
+                current_heading = stripped
+                current_lines = [stripped]
+            elif current_heading is not None:
+                current_lines.append(line.rstrip())
+        if current_heading is not None:
+            ordered.append((current_heading, "\n".join(current_lines).strip()))
+        return ordered
+
+    @staticmethod
+    def _section_preserves_protected_facts(
+        original_section: str,
+        candidate_section: str,
+        protected_facts: tuple[str, ...],
+    ) -> bool:
+        return all(
+            fact not in original_section or fact in candidate_section
+            for fact in protected_facts
+        )
+
+    @staticmethod
     def _prompt(rule_text, protected_facts):
         facts = "\n".join(f"- {fact}" for fact in protected_facts)
+        protected_lines = "\n".join(
+            f"- {line.strip()}"
+            for line in CVGenerationService._protected_lines(rule_text, protected_facts)
+        )
+        headings = "\n".join(f"- {heading}" for heading in REQUIRED_FLOWCV_HEADINGS)
         return (
-            "Polish language only for the following FlowCV plain-text CV.\n"
-            "Keep the same facts. Do not invent employers, dates, tools, degrees, "
-            "certifications, metrics, locations, languages, visa status, job titles, "
-            "or new claims. Do not remove protected facts. Keep section headings, "
-            "contact details, dates, names, employers, degrees, visa/work authorization, "
-            "and language levels unchanged. Keep the CV concise and 2-page-friendly. "
-            "Use professional but realistic wording for a career-transition Data Analyst "
-            "profile. Do not exaggerate seniority and do not claim the candidate has "
-            "worked as a Data Analyst unless the source text says so. Return only the "
-            "complete CV text.\n\nPROTECTED FACTS\n"
+            "You are polishing a FlowCV plain-text CV.\n"
+            "Output must be in English only. Return only the polished CV text. "
+            "Do not explain anything. Do not use markdown fences. Do not translate "
+            "into any other language.\n"
+            "Safe polish mode: you may only polish PROFESSIONAL SUMMARY and "
+            "non-protected wording inside KEY SKILLS. Use minor grammar edits only. "
+            "Preserve CANDIDATE HEADER, PROFESSIONAL HEADLINE, ACHIEVEMENTS, "
+            "PROFESSIONAL EXPERIENCE, PROJECTS, CERTIFICATIONS AND COURSES, "
+            "EDUCATION, LANGUAGES, and ADDITIONAL INFORMATION exactly; do not "
+            "rewrite those sections.\n"
+            "Keep the exact section headings, spelling, and uppercase style below:\n"
+            f"{headings}\n"
+            "Preserve all dates exactly. Preserve all employer names exactly. "
+            "Preserve phone, email, LinkedIn, GitHub, and location exactly. "
+            "Preserve job titles exactly. Preserve degree names, certification "
+            "names, language levels, visa/work authorization, company names, "
+            "project names, and tool names exactly.\n"
+            "Do not add words like led, owned, managed, expert, senior, advanced, "
+            "architected, headed, or directed unless that exact word is already "
+            "present in the original CV text. Do not add new metrics, tools, "
+            "companies, projects, degrees, certifications, languages, locations, "
+            "visa claims, job titles, or unsupported claims. Only improve grammar, "
+            "clarity, repetition, and professional wording. If unsure, keep the "
+            "original sentence unchanged.\n"
+            "The following lines must appear exactly unchanged in your output:\n"
+            f"{protected_lines}\n\nPROTECTED FACTS\n"
             f"{facts}\n\nRULE-BASED CV\n{rule_text}"
         )
+
+    @staticmethod
+    def _protected_lines(
+        rule_text: str,
+        protected_facts: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        lines: list[str] = []
+        seen: set[str] = set()
+        for line in rule_text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(fact and fact in stripped for fact in protected_facts):
+                if stripped not in seen:
+                    seen.add(stripped)
+                    lines.append(stripped)
+        return tuple(lines)

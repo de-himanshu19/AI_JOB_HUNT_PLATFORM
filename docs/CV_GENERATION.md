@@ -73,9 +73,9 @@ filename. Failed database persistence removes newly written files.
 
 ## Optional AI derivative
 
-Milestone 13 supports an explicitly enabled OpenAI-compatible chat-completions
-API provider. Rule-based generation remains the default and needs no AI
-credentials. API polish requires all of:
+Milestone 13 supports explicitly enabled API providers. Rule-based generation
+remains the default and needs no AI credentials. OpenAI-compatible chat
+completions use:
 
 ```text
 AI_ENABLED=true
@@ -86,6 +86,22 @@ AI_MODEL=<model name>
 AI_TIMEOUT_SECONDS=30
 AI_MAX_RETRIES=2
 ```
+
+Native Ollama Cloud uses `/api/chat`. For CV polish, prefer `gpt-oss:20b`;
+do not use `gpt-oss-safeguard` as the polishing model. Configure it with:
+
+```text
+AI_ENABLED=true
+AI_PROVIDER=ollama_cloud
+AI_API_KEY=
+AI_BASE_URL=https://ollama.com
+AI_MODEL=gpt-oss:20b
+AI_TIMEOUT_SECONDS=120
+AI_MAX_RETRIES=2
+```
+
+Do not use `AI_PROVIDER=openai_compatible` for native Ollama Cloud endpoints;
+that provider calls chat-completions style paths instead of `/api/chat`.
 
 Generation-time polish requires both `--ai-polish` and `--live-ai`:
 
@@ -103,11 +119,21 @@ The request sends CV text and protected-fact instructions to the configured
 external API. Never commit real API keys. Prompts, CV/JD text, response bodies,
 credentials, and token-bearing URLs are never logged.
 
+AI polish is intentionally conservative: the prompt asks the model to keep the
+FlowCV headings, dates, employers, contact details, protected facts, and
+language levels unchanged, and to improve only grammar, clarity, repetition, and
+professional wording. A `validation_failed` result is expected and safe when the
+model changes facts, translates content, removes required sections, or adds
+unsupported claims.
+Safe polish mode restores protected sections from the rule-based artifact before
+validation; only `PROFESSIONAL SUMMARY` and non-protected `KEY SKILLS` wording
+can survive from the AI output.
+
 Successful output is validated and stored as a separate child artifact with
 `parent_rule_based_artifact_id`, provider, model, prompt version, and validation
-metadata. Timeout, rate-limit, provider, malformed-response, safety, config,
-protected-fact, unsupported-number/tool, broken-character, or stronger-wording
-failures create a safe `cv_ai_attempts` failure record and leave the
-rule-based artifact unchanged.
+metadata. Timeout, rate-limit, authentication/config, provider,
+malformed-response, safety, protected-fact, unsupported-number/tool,
+broken-character, or stronger-wording failures create a safe `cv_ai_attempts`
+failure record and leave the rule-based artifact unchanged.
 
 Automated tests inject fake providers and make no live AI request.

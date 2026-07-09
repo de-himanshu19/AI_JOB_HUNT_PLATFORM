@@ -4,10 +4,12 @@ import requests
 
 from app.config import settings_from_mapping
 from app.integrations.ai.base import (
+    AIConfigurationError,
     AIMalformedResponseError,
     AIRateLimitError,
     AISafetyNotEnabledError,
 )
+from app.integrations.ai.ollama_cloud import OllamaCloudProvider
 from app.integrations.ai.openai_compatible import OpenAICompatibleProvider
 
 
@@ -52,6 +54,15 @@ def _settings(**overrides):
     return settings_from_mapping(values)
 
 
+def _ollama_settings(**overrides):
+    return _settings(
+        AI_PROVIDER="ollama_cloud",
+        AI_BASE_URL="https://ollama.invalid",
+        AI_MODEL="gpt-oss:20b",
+        **overrides,
+    )
+
+
 def test_openai_compatible_provider_returns_mocked_polished_text() -> None:
     session = FakeSession([
         FakeResponse(payload={"choices": [{"message": {"content": "Polished CV"}}]})
@@ -71,7 +82,7 @@ def test_openai_compatible_provider_configuration_is_checked_without_network() -
 
     try:
         OpenAICompatibleProvider(
-            _settings(AI_ENABLED="false", AI_API_KEY=""), session=session
+            _settings(AI_ENABLED="false", **{"AI_API_KEY": ""}), session=session
         ).polish("Prompt")
     except AISafetyNotEnabledError as error:
         assert "AI_ENABLED" in str(error)
@@ -106,3 +117,83 @@ def test_openai_compatible_provider_maps_rate_limit_timeout_and_malformed() -> N
         pass
     else:
         raise AssertionError("Malformed response was not mapped")
+
+
+def test_ollama_cloud_provider_posts_native_chat_request_and_parses_message() -> None:
+    session = FakeSession([
+        FakeResponse(payload={"message": {"content": "Polished from chat"}})
+    ])
+
+    text = OllamaCloudProvider(_ollama_settings(), session=session).polish("Prompt")
+
+    assert text == "Polished from chat\n"
+    assert session.calls[0]["url"] == "https://ollama.invalid/api/chat"
+    assert session.calls[0]["headers"]["Authorization"] == "Bearer secret-key"
+    payload = session.calls[0]["json"]
+    assert payload["model"] == "gpt-oss:20b"
+    assert payload["stream"] is False
+    assert payload["options"] == {"temperature": 0.1, "top_p": 0.3}
+    assert payload["messages"][0]["role"] == "system"
+    assert "English only" in payload["messages"][0]["content"]
+    assert "Do not translate" in payload["messages"][0]["content"]
+    assert "led, owned, managed" in payload["messages"][0]["content"]
+    assert payload["messages"][1] == {"role": "user", "content": "Prompt"}
+    assert session.calls[0]["timeout"] == 12
+
+
+def test_ollama_cloud_provider_parses_generate_response_fallback() -> None:
+    session = FakeSession([FakeResponse(payload={"response": "Fallback text"})])
+
+    text = OllamaCloudProvider(_ollama_settings(), session=session).polish("Prompt")
+
+    assert text == "Fallback text\n"
+
+
+def test_ollama_cloud_provider_configuration_errors_make_no_network_call() -> None:
+    session = FakeSession([])
+
+    try:
+        OllamaCloudProvider(
+            _ollama_settings(**{"AI_API_KEY": ""}), session=session
+        ).polish("Prompt")
+    except AIConfigurationError as error:
+        assert "AI_API_KEY" in str(error)
+    else:
+        raise AssertionError("Missing API key did not fail safely")
+
+    assert session.calls == []
+
+
+def test_ollama_cloud_provider_maps_status_and_malformed_responses() -> None:
+    rate_limited = FakeSession([FakeResponse(status_code=429), FakeResponse(status_code=429)])
+    try:
+        OllamaCloudProvider(_ollama_settings(), session=rate_limited).polish("Prompt")
+    except AIRateLimitError:
+        pass
+    else:
+        raise AssertionError("Rate limit was not mapped")
+    assert len(rate_limited.calls) == 2
+
+    unauthorized = FakeSession([FakeResponse(status_code=401)])
+    try:
+        OllamaCloudProvider(_ollama_settings(), session=unauthorized).polish("Prompt")
+    except AIConfigurationError:
+        pass
+    else:
+        raise AssertionError("401 was not mapped to configuration error")
+
+    timed_out = FakeSession([FakeResponse(status_code=408)])
+    try:
+        OllamaCloudProvider(_ollama_settings(), session=timed_out).polish("Prompt")
+    except requests.Timeout:
+        pass
+    else:
+        raise AssertionError("408 was not mapped to timeout")
+
+    malformed = FakeSession([FakeResponse(payload={"message": {}})])
+    try:
+        OllamaCloudProvider(_ollama_settings(), session=malformed).polish("Prompt")
+    except AIMalformedResponseError:
+        pass
+    else:
+        raise AssertionError("Missing content was not mapped")

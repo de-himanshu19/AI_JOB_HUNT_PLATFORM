@@ -120,6 +120,19 @@ def test_feature_specific_validation_is_deferred_until_enabled(tmp_path: Path) -
     assert configured_ai.ai_provider == "openai_compatible"
     assert configured_ai.ai_api_key.get_secret_value() == "test-key"
 
+    ollama_cloud = config.settings_from_mapping(
+        {
+            "AI_ENABLED": "true",
+            "AI_PROVIDER": "ollama_cloud",
+            "AI_API_KEY": "test-key",
+            "AI_BASE_URL": "https://ollama.com",
+            "AI_MODEL": "gpt-oss:20b",
+        },
+        root=tmp_path,
+    )
+    assert ollama_cloud.ai_provider == "ollama_cloud"
+    assert ollama_cloud.ai_model == "gpt-oss:20b"
+
     with pytest.raises(ValidationError, match="AI_PROVIDER"):
         config.settings_from_mapping({"AI_PROVIDER": "local_ollama"}, root=tmp_path)
 

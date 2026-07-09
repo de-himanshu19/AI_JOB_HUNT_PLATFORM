@@ -403,6 +403,79 @@ def test_ai_validator_rejects_changed_facts_numbers_tools_and_incomplete_output(
     assert any("private-use" in error for error in broken_result.errors)
 
 
+def test_ai_validator_rejects_structure_contact_date_employer_and_translation_changes() -> None:
+    rule_text = """CANDIDATE HEADER
+Example Candidate
+Berlin, Germany
++49 123 456
+candidate@example.com
+https://www.linkedin.com/in/example
+https://github.com/example
+
+PROFESSIONAL HEADLINE
+Reporting Analyst
+
+PROFESSIONAL SUMMARY
+Reporting analyst with SQL and Power BI experience.
+
+ACHIEVEMENTS
+- Reduced reporting time by 10%.
+
+KEY SKILLS
+Data Analysis: SQL, Power BI
+
+PROFESSIONAL EXPERIENCE
+Reporting Analyst | Example GmbH | 2022-10 - 2025-07
+- Built operational reports.
+
+PROJECTS
+AI Job Hunt Platform
+- Built reporting workflow.
+
+CERTIFICATIONS AND COURSES
+SQL for Data Analysis
+
+EDUCATION
+Business degree
+
+LANGUAGES
+- English: fluent
+
+ADDITIONAL INFORMATION
+- Available immediately
+"""
+    protected = (
+        "Example Candidate", "Berlin, Germany", "+49 123 456",
+        "candidate@example.com", "https://www.linkedin.com/in/example",
+        "https://github.com/example", "Example GmbH", "2022-10 - 2025-07",
+        "Reporting Analyst", "Business degree", "English: fluent",
+        "Reduced reporting time by 10%", "SQL", "Power BI",
+        "AI Job Hunt Platform", "Available immediately",
+    )
+    validator = CVValidator()
+
+    assert validator.validate_ai(rule_text, rule_text, protected).valid
+    missing_section = rule_text.replace("KEY SKILLS\nData Analysis: SQL, Power BI\n\n", "")
+    changed_contact = rule_text.replace("+49 123 456", "+49 999 999")
+    changed_date = rule_text.replace("2022-10 - 2025-07", "2023-01 - 2025-07")
+    changed_employer = rule_text.replace("Example GmbH", "Example AG")
+    translated = rule_text.replace(
+        "AI Job Hunt Platform", "Platforma AI Job Hunt"
+    )
+
+    assert any(
+        "missing section: KEY SKILLS" in error
+        for error in validator.validate_ai(missing_section, rule_text, protected).errors
+    )
+    for changed in (changed_contact, changed_date, changed_employer):
+        result = validator.validate_ai(changed, rule_text, protected)
+        assert any("protected fact" in error for error in result.errors)
+    assert any(
+        "Platforma AI Job Hunt" in error
+        for error in validator.validate_ai(translated, rule_text, protected).errors
+    )
+
+
 def test_artifact_store_uses_uuid_names_atomic_files_and_never_overwrites(tmp_path) -> None:
     from uuid import uuid4
 

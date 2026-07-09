@@ -88,6 +88,11 @@ AI_BASE_URL=https://api.openai.com/v1
 AI_MODEL=gpt-4.1-mini
 AI_TIMEOUT_SECONDS=30
 AI_MAX_RETRIES=2
+# Native Ollama Cloud alternative:
+# AI_PROVIDER=ollama_cloud
+# AI_BASE_URL=https://ollama.com
+# AI_MODEL=gpt-oss:20b
+# AI_TIMEOUT_SECONDS=120
 CV_ARTIFACT_ROOT=data/cv_artifacts
 CV_MANUAL_MAX_BYTES=1000000
 OPENAI_API_KEY=
@@ -112,9 +117,13 @@ MYSQL_DATABASE=
 
 ## Milestone 13 AI polish safety
 
-Use `AI_PROVIDER=openai_compatible` only for explicit API-based CV polish.
+Use `AI_PROVIDER=openai_compatible` for chat-completions APIs and
+`AI_PROVIDER=ollama_cloud` for native Ollama Cloud `/api/chat` requests.
+For Ollama Cloud CV polish, prefer `AI_MODEL=gpt-oss:20b`, not
+`gpt-oss-safeguard`.
 `AI_ENABLED=false` and `AI_PROVIDER=rule_based` are safe defaults. Never commit a
 real `AI_API_KEY` or `.env` file. API polish sends CV text to the configured
 external service, and the resulting text is stored only if protected-fact
-validation passes. Automated tests use fake providers and do not make live AI,
-Telegram, Arbeitsagentur, EnglishJobs, email, or Ollama requests.
+validation passes. `validation_failed` is expected and safe when a model changes
+facts or FlowCV structure. Automated tests use fake providers and do not make
+live AI, Telegram, Arbeitsagentur, EnglishJobs, email, or Ollama requests.

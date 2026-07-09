@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import settings_from_mapping
+from app.cv.validation import CVValidator
 from app.db.connection import Database
 from app.db.migrations import migrate
 from app.db.repositories import CandidateProfileRepository, JobDescriptionRepository, JobRepository
@@ -34,7 +35,7 @@ class FakeProvider:
 
     def polish(self, prompt: str) -> str:
         self.calls += 1
-        assert "Return only the complete CV text" in prompt
+        assert "Return only the polished CV text" in prompt
         assert "PROTECTED FACTS" in prompt
         return self.response
 
@@ -261,6 +262,178 @@ def test_ai_derivative_is_separate_and_invalid_output_records_safe_failure(tmp_p
     assert artifact == base
     assert {attempt.status.value for attempt in attempts} == {"succeeded", "failed"}
     assert all(attempt.evidence_report_path.is_file() for attempt in attempts)
+
+
+def test_ai_polish_prompt_is_strict_about_structure_language_and_claims() -> None:
+    protected_line = (
+        "- Created brochures, product catalogues, presentations, campaign summaries, "
+        "and social-media content."
+    )
+    prompt = CVGenerationService._prompt(
+        f"CANDIDATE HEADER\nExample Candidate\nACHIEVEMENTS\n{protected_line}\n",
+        (
+            "Example Candidate",
+            "+49 123",
+            "Example GmbH",
+            "2022-10 - 2025-07",
+            protected_line.removeprefix("- "),
+        ),
+    )
+
+    assert "Output must be in English only" in prompt
+    assert "Do not translate into any other language" in prompt
+    assert "Do not use markdown fences" in prompt
+    assert "Safe polish mode" in prompt
+    assert "Do not add words like led, owned, managed, expert" in prompt
+    assert "Do not add new metrics, tools, companies" in prompt
+    assert "If unsure, keep the original sentence unchanged" in prompt
+    assert "The following lines must appear exactly unchanged in your output" in prompt
+    assert protected_line in prompt
+    for heading in cv_generation.REQUIRED_FLOWCV_HEADINGS:
+        assert heading in prompt
+
+
+def test_safe_ai_polish_restores_protected_achievement_and_experience_lines() -> None:
+    protected_achievement = (
+        "Approximately 3 years of technical system testing, reporting, validation, "
+        "and support experience in Germany."
+    )
+    protected_experience = (
+        "Created brochures, product catalogues, presentations, campaign summaries, "
+        "and social-media content."
+    )
+    rule_text = f"""CANDIDATE HEADER
+Example Candidate | Berlin, Germany | +49 123 | example@example.com | LinkedIn | GitHub
+
+PROFESSIONAL HEADLINE
+Data Analyst
+
+PROFESSIONAL SUMMARY
+Data analyst with SQL, Excel, and reporting experience.
+
+ACHIEVEMENTS
+- {protected_achievement}
+
+KEY SKILLS
+- Data Analysis: SQL, Excel, reporting
+- BI and Reporting: Power BI
+
+PROFESSIONAL EXPERIENCE
+Technical Reporting Analyst | Example GmbH | 10/2022 - 07/2025
+- {protected_experience}
+
+PROJECTS
+- AI Job Hunt Platform: Built SQLite-backed job workflows.
+
+CERTIFICATIONS AND COURSES
+- SQL for Data Analysis
+
+EDUCATION
+- MBA in International Management
+
+LANGUAGES
+- English: fluent
+- German: A2
+
+ADDITIONAL INFORMATION
+- Authorized to work in Germany under an EU Blue Card
+"""
+    polished_text = rule_text.replace(
+        "Data analyst with SQL, Excel, and reporting experience.",
+        "Data analyst with SQL, Excel, and reporting experience, focused on clear business reporting.",
+    ).replace(
+        protected_achievement,
+        "About three years of technical testing and reporting work in Germany.",
+    ).replace(
+        protected_experience,
+        "Prepared campaign assets and commercial presentation materials.",
+    )
+    protected_facts = (
+        "Example Candidate",
+        "Berlin, Germany",
+        "+49 123",
+        "example@example.com",
+        "LinkedIn",
+        "GitHub",
+        "Data Analyst",
+        "Example GmbH",
+        "10/2022 - 07/2025",
+        "SQL",
+        "Excel",
+        "Power BI",
+        "MBA in International Management",
+        "English: fluent",
+        "German: A2",
+        "Authorized to work in Germany under an EU Blue Card",
+        protected_achievement,
+        protected_experience,
+    )
+
+    merged = CVGenerationService._safe_polish_output(
+        polished_text, rule_text, protected_facts
+    )
+
+    assert "focused on clear business reporting" in merged
+    assert f"- {protected_achievement}" in merged
+    assert f"- {protected_experience}" in merged
+    assert "About three years of technical testing" not in merged
+    assert "Prepared campaign assets" not in merged
+    assert CVValidator().validate_ai(merged, rule_text, protected_facts).valid
+
+
+def test_safe_ai_polish_missing_structure_still_fails_validation() -> None:
+    rule_text = """CANDIDATE HEADER
+Example Candidate
+
+PROFESSIONAL HEADLINE
+Data Analyst
+
+PROFESSIONAL SUMMARY
+Data analyst with reporting experience.
+
+ACHIEVEMENTS
+- Protected achievement.
+
+KEY SKILLS
+- Data Analysis: SQL
+
+PROFESSIONAL EXPERIENCE
+Analyst | Example GmbH | 2024
+- Protected experience.
+"""
+    protected_facts = (
+        "Example Candidate",
+        "Data Analyst",
+        "Example GmbH",
+        "2024",
+        "Protected achievement.",
+        "Protected experience.",
+    )
+
+    merged = CVGenerationService._safe_polish_output(
+        "This is not FlowCV output.", rule_text, protected_facts
+    )
+
+    validation = CVValidator().validate_ai(merged, rule_text, protected_facts)
+    assert not validation.valid
+    assert "missing section: CANDIDATE HEADER" in validation.errors
+
+
+def test_ai_code_fence_wrapped_output_is_stripped_before_validation(tmp_path) -> None:
+    settings, database, profile, rules = _setup(tmp_path)
+    job = _job(database)
+    base = CVGenerationService(
+        database, settings, rules
+    ).generate_for_job(job.id, profile.id).rule_based_artifact
+    rule_text = base.artifact_path.read_text(encoding="utf-8")
+    provider = FakeProvider(f"```text\n{rule_text}```")
+
+    result = CVGenerationService(
+        database, settings, rules, provider=provider
+    ).generate_for_job(job.id, profile.id, ai_polish=True, live_ai=True)
+
+    assert result.ai_status == "succeeded"
+    assert result.ai_artifact.artifact_path.read_text(encoding="utf-8") == rule_text
 
 
 def test_ai_timeout_and_provider_errors_are_safe_and_rule_file_survives(tmp_path) -> None:

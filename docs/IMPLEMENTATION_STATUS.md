@@ -146,7 +146,7 @@ External credential rotation remains a manual security gate. No credential value
 
 ### Migration Milestone 13
 
-- Optional OpenAI-compatible API CV polish provider with `AI_ENABLED=false` and `AI_PROVIDER=rule_based` safe defaults.
+- Optional OpenAI-compatible and native Ollama Cloud API CV polish providers with `AI_ENABLED=false` and `AI_PROVIDER=rule_based` safe defaults.
 - Live AI polish requires explicit CLI/dashboard request and `--live-ai`/confirmation; rule-based CV generation remains offline and authoritative.
 - API provider uses user-supplied `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`, timeout, and retry settings without logging secrets, prompts, CV text, or response bodies.
 - Strict polish prompt preserves facts, dates, employers, contact details, degree names, language levels, work authorization, and FlowCV-friendly plain-text structure.
@@ -191,7 +191,7 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 10: `app/services/pipeline.py`, pipeline CLI command, pipeline tests, and `docs/PIPELINE.md`.
 - Milestone 11: application tracking migration/service/repository/CLI/dashboard extensions, focused CRM tests, and `docs/APPLICATION_TRACKING.md`.
 - Milestone 12: CV workflow dashboard/query/action extensions, CV artifact CLI improvements, focused tests, and `docs/CV_WORKFLOW.md`.
-- Milestone 13: OpenAI-compatible AI provider, protected-fact validation extensions, `cv polish` CLI workflow, focused provider/CV/dashboard/application tests, and AI configuration docs.
+- Milestone 13: OpenAI-compatible and native Ollama Cloud AI providers, protected-fact validation extensions, `cv polish` CLI workflow, focused provider/CV/dashboard/application tests, and AI configuration docs.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
