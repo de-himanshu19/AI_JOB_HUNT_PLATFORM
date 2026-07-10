@@ -22,7 +22,9 @@ flowchart LR
     Ranking --> Notify["Notification preview"]
     Ranking --> CV["CV generation"]
     Applications --> Prep["Prep packs"]
+    Prep --> AppPack["Application packages"]
     CV --> Prep
+    CV --> AppPack
     CV --> Validator["Validation layer"]
     Validator --> Artifacts["Artifact storage"]
     CV --> AI["Optional AI provider"]
@@ -60,6 +62,9 @@ Services contain business workflows and keep page/command code thin:
   derivatives.
 - Prep pack service creates local markdown application/interview drafts from
   stored job, profile, analysis, application, and CV artifact evidence.
+- Application pack service creates local manual-submission folders with
+  checklists, job snapshots, CV references, cover-letter drafts, submission
+  notes, and follow-up plans.
 - Legacy import service handles backup, dry-run, apply, verify, and reconcile.
 
 ## Repository And Database Layer
@@ -128,3 +133,7 @@ Generated artifacts live under ignored runtime paths and should not be committed
 Prep packs are also local generated files under ignored runtime storage
 (`data/prep_packs/`). They are drafts for human review and are not submitted,
 emailed, sent to Telegram, or used to mutate application state by default.
+
+Application packages are local generated folders under ignored runtime storage
+(`data/application_packs/`). They reference CV artifacts by default and copy CV
+text only when explicitly requested with `--include-cv-text`.

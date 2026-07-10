@@ -24,6 +24,7 @@ from app.services.collection import CollectionService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION, CVGenerationService
 from app.services.analysis_rules import AnalysisRules
 from app.services.analytics import ApplicationAnalyticsService
+from app.services.application_pack import ApplicationPackService
 from app.services.applications import ApplicationService
 from app.services.daily_run import DailyRunConfigError, DailyRunService, DailySearch
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
@@ -313,6 +314,22 @@ def build_parser() -> argparse.ArgumentParser:
     prep_pack.add_argument("--format", choices=["markdown"], default="markdown")
     prep_pack.add_argument("--force", action="store_true")
 
+    application_pack = commands.add_parser(
+        "application-pack",
+        help="Create local manual-application package folders",
+    )
+    application_pack_commands = application_pack.add_subparsers(
+        dest="application_pack_command", required=True
+    )
+    application_pack_create = application_pack_commands.add_parser("create")
+    application_pack_create.add_argument("--profile-id", required=True)
+    application_pack_create.add_argument("--job-id", required=True)
+    application_pack_create.add_argument("--cv-artifact-id")
+    application_pack_create.add_argument("--prep-pack-path", type=Path)
+    application_pack_create.add_argument("--output-dir", type=Path)
+    application_pack_create.add_argument("--include-cv-text", action="store_true")
+    application_pack_create.add_argument("--force", action="store_true")
+
     applications = commands.add_parser(
         "applications", help="Track job applications locally"
     )
@@ -350,6 +367,14 @@ def build_parser() -> argparse.ArgumentParser:
     app_follow.add_argument("--job-id", required=True)
     app_follow.add_argument("--date", required=True)
     app_follow.add_argument("--note")
+    app_submit = application_commands.add_parser("submit-manual")
+    app_submit.add_argument("--profile-id", required=True)
+    app_submit.add_argument("--job-id", required=True)
+    app_submit.add_argument("--note", required=True)
+    app_submit.add_argument("--follow-up-date")
+    app_submit.add_argument("--applied-date")
+    app_submit.add_argument("--channel")
+    app_submit.add_argument("--reference")
     app_list = application_commands.add_parser("list")
     app_list.add_argument("--profile-id", required=True)
     app_list.add_argument("--status", choices=[item.value for item in ApplicationStatus])
@@ -957,6 +982,17 @@ def _application_event_json(event):
     }
 
 
+def _manual_submission_note(args: argparse.Namespace) -> str:
+    details = [args.note]
+    if args.applied_date:
+        details.append(f"applied_date={args.applied_date}")
+    if args.channel:
+        details.append(f"channel={args.channel}")
+    if args.reference:
+        details.append(f"reference={args.reference}")
+    return " | ".join(item for item in details if item)
+
+
 def _cv(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging(settings)
@@ -1098,6 +1134,26 @@ def _applications(args: argparse.Namespace) -> int:
             follow_up_date=args.date,
             note=args.note,
         ))
+    elif command == "submit-manual":
+        submission_note = _manual_submission_note(args)
+        application = service.mark_applied(
+            args.profile_id,
+            args.job_id,
+            note=submission_note,
+        )
+        follow_up_changed = False
+        if args.follow_up_date:
+            application = service.set_follow_up(
+                profile_id=args.profile_id,
+                job_id=args.job_id,
+                follow_up_date=args.follow_up_date,
+                note="Follow-up date set after manual application submission",
+            )
+            follow_up_changed = True
+        output = _application_json(application)
+        output["manual_submission_recorded"] = True
+        output["follow_up_changed"] = follow_up_changed
+        output["network_requested"] = False
     elif command == "list":
         output = [
             _application_json(item)
@@ -1160,6 +1216,31 @@ def _prep(args: argparse.Namespace) -> int:
         cv_artifact_id=args.cv_artifact_id,
         output_dir=args.output_dir,
         output_format=args.format,
+        force=args.force,
+    )
+    print(json.dumps(result.as_json(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _application_pack(args: argparse.Namespace) -> int:
+    if args.application_pack_command != "create":
+        raise AssertionError("Unhandled application-pack command")
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    service = ApplicationPackService(
+        database,
+        default_output_dir=settings.data_dir / "application_packs",
+        prep_pack_dir=settings.data_dir / "prep_packs",
+    )
+    result = service.create_pack(
+        profile_id=args.profile_id,
+        job_id=args.job_id,
+        cv_artifact_id=args.cv_artifact_id,
+        prep_pack_path=args.prep_pack_path,
+        output_dir=args.output_dir,
+        include_cv_text=args.include_cv_text,
         force=args.force,
     )
     print(json.dumps(result.as_json(), ensure_ascii=False, indent=2))
@@ -1379,6 +1460,8 @@ def main(argv: list[str] | None = None) -> int:
         return _analytics(args)
     if args.command == "prep":
         return _prep(args)
+    if args.command == "application-pack":
+        return _application_pack(args)
     if args.command == "applications":
         return _applications(args)
     raise AssertionError("Unhandled command")

@@ -13,6 +13,10 @@ from uuid import UUID
 from app.db.connection import Database
 from app.db.repositories import CandidateProfileRepository
 from app.services.analytics import ApplicationAnalyticsService
+from app.services.application_pack import (
+    ApplicationPackService,
+    latest_application_packs,
+)
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION
 from app.services.deduplication import DEDUPLICATION_VERSION
 from app.services.prep_pack import PrepPackService, latest_prep_packs
@@ -620,6 +624,49 @@ class DashboardQueryService:
         limit: int = 10,
     ) -> tuple[dict[str, object], ...]:
         return latest_prep_packs(prep_pack_dir, job_id=job_id, limit=limit)
+
+    def application_pack_command(
+        self,
+        profile_id: UUID | str,
+        job_id: UUID | str,
+        cv_artifact_id: UUID | str | None = None,
+    ) -> str:
+        return ApplicationPackService(
+            self.database,
+            default_output_dir=Path("data/application_packs"),
+            prep_pack_dir=Path("data/prep_packs"),
+        ).preview_command(
+            profile_id=profile_id,
+            job_id=job_id,
+            cv_artifact_id=cv_artifact_id,
+        )
+
+    def manual_submit_command(
+        self,
+        profile_id: UUID | str,
+        job_id: UUID | str,
+        follow_up_date: str | None = None,
+    ) -> str:
+        return ApplicationPackService(
+            self.database,
+            default_output_dir=Path("data/application_packs"),
+            prep_pack_dir=Path("data/prep_packs"),
+        ).submit_manual_command(
+            profile_id=profile_id,
+            job_id=job_id,
+            follow_up_date=follow_up_date,
+        )
+
+    def latest_application_packs(
+        self,
+        application_pack_dir: Path | str,
+        *,
+        job_id: UUID | str | None = None,
+        limit: int = 10,
+    ) -> tuple[dict[str, object], ...]:
+        return latest_application_packs(
+            application_pack_dir, job_id=job_id, limit=limit
+        )
 
     @staticmethod
     def _decode_description(value):

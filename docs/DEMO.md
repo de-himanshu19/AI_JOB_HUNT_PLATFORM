@@ -242,6 +242,34 @@ job snapshot, fit summary, evidence-backed talking points, recruiter questions,
 checklists, and a cover letter draft. It is not submitted anywhere and must be
 reviewed before applying manually.
 
+## Create Manual Application Package
+
+```powershell
+python -m app.cli application-pack create `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --cv-artifact-id <artifact-id>
+```
+
+The package is a local folder under `data/application_packs/` with a checklist,
+job snapshot, cover letter draft, CV reference, submission notes, and follow-up
+plan. By default it references CV artifact metadata only; use
+`--include-cv-text` only when you intentionally want the local CV text copied
+into the package.
+
+After applying manually, record the submission:
+
+```powershell
+python -m app.cli applications submit-manual `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --note "Applied manually via company website" `
+  --follow-up-date YYYY-MM-DD
+```
+
+This records local CRM status and follow-up metadata only. It does not submit,
+email, upload, or notify anyone.
+
 ## View History
 
 ```powershell

@@ -251,6 +251,25 @@ External credential rotation remains a manual security gate. No credential value
   change, source-adapter change, CV/AI validation change, application write
   behavior change, or `existing_projects/` modification was required.
 
+### Migration Milestone 20
+
+- Local application-pack service creates manual-submission folders with
+  checklist, job snapshot, cover letter draft, CV reference, submission notes,
+  and follow-up plan markdown files.
+- CLI `application-pack create --profile-id <id> --job-id <id>` writes ignored
+  local folders under `data/application_packs/` by default and returns JSON
+  with selected CV artifact, prep-pack path, generated files, and warnings.
+- CV artifacts are referenced by default; local CV text is copied only when
+  `--include-cv-text` is explicitly supplied.
+- CLI `applications submit-manual` is a convenience wrapper over existing
+  application tracking semantics to mark `applied`, append notes/events, and
+  set follow-up date only after explicit user command.
+- Job Detail shows exact application-package and manual-submission commands
+  plus latest local package folders passively.
+- No auto-apply, form submission, email, Telegram send, upload, live AI call,
+  schema migration, scoring change, source-adapter change, CV/AI validation
+  change, or `existing_projects/` modification was required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -300,6 +319,10 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 19: prep-pack service, CLI command, dashboard read-only command/file
   visibility, ignored `data/prep_packs/` output path, focused tests, and
   `docs/PREP_PACKS.md`.
+- Milestone 20: application-pack service, CLI create command, explicit
+  submit-manual tracking wrapper, dashboard read-only command/file visibility,
+  ignored `data/application_packs/` output path, focused tests, and
+  `docs/MANUAL_APPLICATIONS.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

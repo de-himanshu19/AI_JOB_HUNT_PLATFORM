@@ -44,7 +44,9 @@ flowchart LR
     Dashboard --> Analytics["Application analytics"]
     Dashboard --> Tracking["Application tracking"]
     Tracking --> Prep["Prep pack drafts"]
+    Prep --> AppPack["Manual application package"]
     CV --> Prep
+    CV --> AppPack
     CV --> Tracking
     CV --> AI["Optional safe AI polish"]
     AI --> Tracking
@@ -61,7 +63,8 @@ flowchart TD
     Polish --> Attach["Attach CV artifact"]
     Generate --> Attach
     Attach --> Prep["Generate prep pack"]
-    Prep --> Apply["Apply manually outside the app"]
+    Prep --> Package["Create application package"]
+    Package --> Apply["Apply manually outside the app"]
     Apply --> FollowUp["Track follow-up and history"]
 ```
 
@@ -95,6 +98,8 @@ flowchart TD
   follow-ups, daily-run activity, and recent job-search movement.
 - Rule-based FlowCV text generation with private evidence reports.
 - Evidence-backed application/interview prep packs as local markdown drafts.
+- Manual application packages with checklists, notes, CV references, and
+  follow-up plan.
 - Safe API-based AI CV polish using OpenAI-compatible or native Ollama Cloud
   providers.
 - Protected-fact validation so AI output cannot silently change dates,
@@ -115,6 +120,8 @@ flowchart TD
 - AI artifacts are stored only as separate child artifacts after validation.
 - Prep packs are local drafts only; they are not submitted, emailed, sent, or
   treated as application actions.
+- Application packages are local files only; manual submission is recorded only
+  after an explicit user command.
 - `.env`, `data/`, runtime databases, and generated private artifacts are not
   committed.
 - Tests use fixtures and temporary databases; ordinary automated tests do not
@@ -133,6 +140,7 @@ captured and reviewed for public sharing.
 - Application tracking page: `docs/images/application-tracking-placeholder.png`
 - Application analytics page: `docs/images/application-analytics-placeholder.png`
 - Prep pack markdown preview: `docs/images/prep-pack-placeholder.png`
+- Manual application package: `docs/images/application-pack-placeholder.png`
 
 ## Setup
 
@@ -199,6 +207,22 @@ Generate a local application/interview prep pack:
 
 ```powershell
 python -m app.cli prep pack --profile-id <profile-id> --job-id <job-id>
+```
+
+Create a local manual application package:
+
+```powershell
+python -m app.cli application-pack create --profile-id <profile-id> --job-id <job-id>
+```
+
+After applying manually, record submission and follow-up:
+
+```powershell
+python -m app.cli applications submit-manual `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --note "Applied manually via company website" `
+  --follow-up-date YYYY-MM-DD
 ```
 
 Run the local daily wrapper:
@@ -272,6 +296,7 @@ ordinary offline verification path.
 - [CV workflow](docs/CV_WORKFLOW.md)
 - [Application tracking](docs/APPLICATION_TRACKING.md)
 - [Prep packs](docs/PREP_PACKS.md)
+- [Manual applications](docs/MANUAL_APPLICATIONS.md)
 - [Legacy import](docs/LEGACY_IMPORT.md)
 
 ## Current Limitations

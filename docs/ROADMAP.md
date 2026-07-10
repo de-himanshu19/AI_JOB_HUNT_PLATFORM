@@ -94,6 +94,17 @@ not a commitment to implement future items automatically.
 - Dashboard Job Detail shows the exact prep-pack CLI command and latest local
   prep-pack files passively.
 
+### M20: Manual Application Submission Workflow
+
+- Local application package folders for final manual review.
+- Checklist, job snapshot, cover letter draft, CV reference, submission notes,
+  and follow-up plan files.
+- CV text is referenced by default and copied only with explicit
+  `--include-cv-text`.
+- `applications submit-manual` records local applied status and follow-up only
+  after the user applies manually.
+- Dashboard Job Detail shows exact package/submission commands passively.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
@@ -103,6 +114,7 @@ not a commitment to implement future items automatically.
 - Add more safe job sources behind the shared adapter contract.
 - Improve analytics calibration with reviewed outcomes and longer trend windows.
 - Add richer prep-pack templates after enough reviewed application feedback.
+- Add richer manual-submission analytics after more tracked outcomes.
 - Prepare final anonymized deployment/demo packaging with reviewed screenshots
   and fixture data.
 

@@ -495,6 +495,31 @@ def job_detail_page() -> None:
             st.markdown("**Latest local prep packs**")
             st.dataframe(packs, use_container_width=True, hide_index=True)
 
+        st.subheader("Manual application package")
+        package_command = context.queries.application_pack_command(
+            _profile_id(),
+            selected,
+            selected_cv,
+        )
+        st.code(package_command, language="powershell")
+        submit_command = context.queries.manual_submit_command(
+            _profile_id(),
+            selected,
+        )
+        st.code(submit_command, language="powershell")
+        st.caption(
+            "Application packages are local files only. Marking an application "
+            "as submitted requires running the explicit submit-manual command "
+            "after you apply yourself."
+        )
+        application_packs = context.queries.latest_application_packs(
+            context.settings.data_dir / "application_packs",
+            job_id=selected,
+        )
+        if application_packs:
+            st.markdown("**Latest local application packages**")
+            st.dataframe(application_packs, use_container_width=True, hide_index=True)
+
 
 def duplicate_review_page() -> None:
     context = runtime()
