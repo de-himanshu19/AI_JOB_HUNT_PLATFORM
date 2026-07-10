@@ -65,9 +65,21 @@ provided. It does not validate an external portal and does not send anything.
 
 ## Dashboard
 
-The Job Detail page shows exact CLI commands for creating a package and marking
-manual submission. It also lists latest local package folders if they exist.
-This dashboard section is passive and does not create packages automatically.
+The dashboard daily flow is:
+
+```text
+Review Jobs -> Review Tray -> Job Detail -> CV Workflow -> Applications
+```
+
+The Review Tray is backed by existing local application tracking and displayed
+as the working queue for jobs worth action. The Job Detail page shows exact CLI
+commands for creating a package and marking manual submission. It also offers
+explicit local-only buttons for package creation and Mark Applied; nothing runs
+on page load.
+
+When marking a job applied from the dashboard, the default follow-up date is
+seven days from today. The status changes only after an explicit button click
+and confirmation.
 
 ## Safety Notes
 

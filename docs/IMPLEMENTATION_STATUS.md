@@ -289,6 +289,42 @@ External credential rotation remains a manual security gate. No credential value
   live AI call, schema migration, scoring change, source-adapter change,
   CV/AI validation change, or `existing_projects/` modification was required.
 
+### Migration Milestone 22
+
+- Portfolio final-release documentation and cleanup kept the project focused on
+  local-first demo readiness without adding product runtime features.
+- Release-facing docs, roadmap language, safety notes, and ignored runtime
+  artifact boundaries remain aligned with the completed milestone set.
+- No scoring, collection, source-adapter, CV generation, AI polish, Telegram,
+  application tracking, schema, or `existing_projects/` behavior was changed.
+
+### Migration Milestone 23
+
+- Dashboard navigation now centers the daily workflow: Daily Runs, Review Jobs,
+  Review Tray, Job Detail, CV Workflow, Applications, Analytics, and Advanced /
+  Diagnostics.
+- Review Jobs uses a Streamlit form so filters apply only after `Apply Filters`;
+  results default to newest Posted / First Seen sorting and show user-facing
+  columns instead of technical IDs.
+- Posted / First Seen display falls back from `published_at` to `first_seen_at`
+  or `created_at`, with helper labels that distinguish posted dates from
+  fallback dates.
+- City-only location and Match Type helpers make tables easier to scan:
+  `authoritative` is shown as `Full analysis`, and `prefilter_only` is shown as
+  `Quick match only`.
+- Review Tray reuses existing application tracking safely by shortlisting jobs
+  with medium priority and the dashboard note `Added to review tray from
+  dashboard`.
+- Selected job state is shared across Review Jobs, Review Tray, Job Detail, and
+  CV Workflow so one vacancy can be worked without repeated searching.
+- Job Detail is presented as an action center with compatibility, description,
+  CV actions, application actions, and advanced details sections.
+- Dashboard Mark Applied actions require explicit clicks and suggest a default
+  follow-up date of today plus seven days.
+- No auto-apply, external upload, Telegram send, automatic AI call, schema
+  migration, scoring change, source-adapter change, CV/AI validation change, or
+  `existing_projects/` modification was required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -346,6 +382,9 @@ No legacy module is imported, and no file under `existing_projects/` is modified
   note event, dashboard read-only command/file visibility, ignored
   `data/communication_drafts/` output path, focused tests, and
   `docs/COMMUNICATION_DRAFTS.md`.
+- Milestone 23: dashboard presentation helpers, Review Jobs form/table
+  projection, Review Tray page, selected-job workflow state, action-center Job
+  Detail rendering, focused dashboard action/presentation tests, and docs.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

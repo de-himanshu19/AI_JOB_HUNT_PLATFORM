@@ -105,7 +105,9 @@ Recommended first run:
 2. Confirm a JSON file appears under `data/daily_runs/`.
 3. Confirm a log file appears under `data/logs/`.
 4. Confirm the dashboard Runs & Diagnostics page shows the latest daily run.
-5. Then enable the scheduled task.
+5. Open Review Jobs, click `Apply Filters`, and add promising jobs to the
+   Review Tray.
+6. Then enable the scheduled task.
 
 ## Inspect Logs
 
@@ -130,3 +132,6 @@ the task stops future runs; it does not delete local history files.
   or `--live-collect` on the command line.
 - Notification preview uses the configured ranking scope; current-run daily
   previews show the jobs from that search instead of older unrelated rankings.
+- Dashboard review remains manual: opening Daily Runs, Review Jobs, or Review
+  Tray never starts a new run, changes application status, sends a notification,
+  generates a CV, or calls AI.

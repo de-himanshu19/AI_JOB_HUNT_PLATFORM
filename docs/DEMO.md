@@ -51,43 +51,74 @@ python -m app.cli daily run `
 python -m app.dashboard
 ```
 
-5. Shortlist a job:
+5. Review jobs in the dashboard:
+
+```text
+Review Jobs -> Apply Filters -> tick interesting jobs -> Add selected to Review Tray
+```
+
+The filter form does not auto-refresh the table on every field change. The
+Review Tray is local CRM state only and does not apply anywhere.
+
+6. Work one job from the Review Tray:
+
+```text
+Review Tray -> select job -> Open Job Detail
+```
+
+The selected job carries into Job Detail and CV Workflow so the same job does
+not need to be searched repeatedly.
+
+7. Optional CLI shortlist equivalent:
 
 ```powershell
 python -m app.cli applications shortlist --profile-id <profile-id> --job-id <job-id> --priority high --note "Strong fit after review"
 ```
 
-6. Generate CV:
+8. Generate CV:
 
 ```powershell
 python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
 ```
 
-7. Optional safe AI polish:
+9. Optional safe AI polish:
 
 ```powershell
 python -m app.cli cv polish --artifact-id <rule-based-artifact-id> --live-ai
 ```
 
-8. Create prep pack:
+10. Create prep pack:
 
 ```powershell
 python -m app.cli prep pack --profile-id <profile-id> --job-id <job-id> --cv-artifact-id <artifact-id>
 ```
 
-9. Create application pack:
+11. Create application pack:
 
 ```powershell
 python -m app.cli application-pack create --profile-id <profile-id> --job-id <job-id> --cv-artifact-id <artifact-id>
 ```
 
-10. Create communication draft:
+12. Create communication draft:
 
 ```powershell
 python -m app.cli communications draft --profile-id <profile-id> --job-id <job-id> --type follow_up
 ```
 
-11. View analytics:
+13. Mark applied only after manually submitting externally:
+
+```powershell
+python -m app.cli applications submit-manual `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --note "Applied manually via company website" `
+  --follow-up-date YYYY-MM-DD
+```
+
+In the dashboard, Job Detail and Review Tray suggest a follow-up date seven days
+from today by default.
+
+14. View analytics:
 
 ```powershell
 python -m app.cli analytics summary --profile-id <profile-id>
@@ -214,9 +245,12 @@ Opening the dashboard is passive. It must not collect jobs, send Telegram
 messages, call AI providers, generate CVs, change application status, approve
 duplicates, or open external vacancy links without explicit user action.
 
-The `Applications Analytics` page is also passive. It reads existing jobs,
-description completeness, applications, follow-up dates, and saved daily-run
-JSON summaries to show funnel progress and source quality.
+The daily workflow pages are passive on load. `Review Jobs` uses an Apply
+Filters button, `Review Tray` shows locally shortlisted jobs, and `Job Detail`
+offers explicit local-only commands/actions. The `Applications Analytics` page
+is also passive. It reads existing jobs, description completeness,
+applications, follow-up dates, and saved daily-run JSON summaries to show funnel
+progress and source quality.
 
 ## Review Analytics From CLI
 

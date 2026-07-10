@@ -23,6 +23,7 @@ from app.dashboard.pages import (
     jobs_page,
     notifications_page,
     overview_page,
+    review_tray_page,
     runs_page,
 )
 from app.db.connection import Database
@@ -143,7 +144,7 @@ def test_startup_and_browsing_make_no_external_request(monkeypatch, tmp_path) ->
     assert not app.exception
     for page in (
         overview_page, analytics_page, jobs_page, job_detail_page, duplicate_review_page,
-        applications_page, cv_builder_page, notifications_page, runs_page,
+        review_tray_page, applications_page, cv_builder_page, notifications_page, runs_page,
     ):
         page_app = AppTest.from_string(
             f"from app.dashboard.pages import {page.__name__}\n{page.__name__}()",

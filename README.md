@@ -68,9 +68,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Pipeline["Run pipeline"] --> Review["Review top jobs"]
-    Review --> Shortlist["Shortlist promising roles"]
-    Shortlist --> Generate["Generate FlowCV text"]
+    Pipeline["Run pipeline"] --> Review["Review fresh jobs"]
+    Review --> Tray["Add to Review Tray"]
+    Tray --> Detail["Open Job Detail"]
+    Detail --> Generate["Generate FlowCV text"]
     Generate --> Polish["Optional AI polish"]
     Polish --> Attach["Attach CV artifact"]
     Generate --> Attach
@@ -105,6 +106,9 @@ flowchart TD
 - Offline Telegram preview and opt-in live delivery workflow.
 - Local Streamlit dashboard for review, duplicate decisions, applications,
   application analytics, CV workflow, notifications, and run diagnostics.
+- Daily Review Tray workflow: apply filters deliberately, tick interesting
+  jobs, carry one selected job across Job Detail and CV Workflow, and mark
+  manual applications with a suggested seven-day follow-up.
 - Application Tracking CRM with shortlist, status, priority, notes, follow-up
   dates, CV artifact links, and immutable history.
 - Read-only application analytics for funnel progress, source quality,
@@ -214,6 +218,16 @@ Open the local dashboard:
 ```powershell
 python -m app.dashboard
 ```
+
+Dashboard daily review flow:
+
+```text
+Daily Runs -> Review Jobs -> Review Tray -> Job Detail -> CV Workflow -> Applications -> Analytics
+```
+
+The Review Jobs filters apply only after clicking `Apply Filters`. Adding jobs
+to the Review Tray reuses local application tracking as `shortlisted` records
+and does not submit, send, upload, or call AI.
 
 Review application analytics from the CLI:
 

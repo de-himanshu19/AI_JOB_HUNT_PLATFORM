@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from dataclasses import asdict
 
 import streamlit as st
 
-from app.dashboard.actions import ConfirmationRequired
 from app.dashboard.components import (
     execute_once,
     page_header,
@@ -16,18 +14,49 @@ from app.dashboard.components import (
 )
 from app.dashboard.runtime import (
     cached_application_analytics,
-    cached_jobs,
     cached_daily_runs,
+    cached_jobs,
     cached_overview,
     cached_runs,
     runtime,
 )
+from app.dashboard.presentation import (
+    date_range_start,
+    default_follow_up_date,
+    fit_score_label,
+    job_row,
+    match_type_label,
+    parse_city,
+    posted_or_first_seen_display,
+    tray_row,
+)
 from app.dashboard.view_models import JobFilters
-from app.domain.enums import ApplicationStatus, DescriptionCompleteness, JobSource
+from app.domain.enums import ApplicationStatus, JobSource
 
 
 def _profile_id() -> str | None:
     return st.session_state.get("dashboard_profile_id")
+
+
+def _selected_job_id() -> str | None:
+    return st.session_state.get("selected_job_id")
+
+
+def _set_selected_job(job_id: str) -> None:
+    st.session_state["selected_job_id"] = job_id
+
+
+def _selected_cv_artifact_id(detail) -> str | None:
+    if detail.applications and detail.applications[0].get("cv_artifact_id"):
+        return str(detail.applications[0]["cv_artifact_id"])
+    if detail.cv_artifacts:
+        return str(detail.cv_artifacts[0].get("id"))
+    return None
+
+
+def _job_option_label(items, value: str) -> str:
+    item = next(entry for entry in items if entry.job_id == value)
+    return f"{item.title} | {item.company or 'Unknown company'} | {parse_city(item.location)}"
 
 
 def overview_page() -> None:
@@ -219,48 +248,106 @@ def analytics_page() -> None:
 def jobs_page() -> None:
     context = runtime()
     page_header(
-        "Jobs",
-        "Search the representative vacancy by default, or deliberately inspect every source record.",
-        eyebrow="Vacancy library",
+        "Review Jobs",
+        "Review fresh vacancies deliberately. Filters update only when you click Apply Filters.",
+        eyebrow="Daily review",
     )
-    with st.expander("Filters and ordering", expanded=True):
+    if "review_jobs_filters" not in st.session_state:
+        st.session_state["review_jobs_filters"] = {
+            "source": "All",
+            "date_range": "Last 7 days",
+            "location_search": "",
+            "search": "",
+            "application_status": "All",
+            "rank_min": 0.0,
+            "fit_min": 0.0,
+            "authority": "All",
+            "include_prefilter_only": True,
+            "page": 1,
+        }
+    stored = st.session_state["review_jobs_filters"]
+    with st.form("review_jobs_filters_form"):
         first, second, third, fourth = st.columns(4)
-        search = first.text_input("Title, company, or location")
-        source = second.selectbox(
-            "Source", ["All", *[item.value for item in JobSource]]
+        source = first.selectbox(
+            "Source",
+            ["All", *[item.value for item in JobSource]],
+            index=["All", *[item.value for item in JobSource]].index(stored["source"]),
         )
-        completeness = third.selectbox(
-            "Description", ["All", *[item.value for item in DescriptionCompleteness]]
+        date_range = second.selectbox(
+            "Posted / First Seen",
+            ["Today", "Last 3 days", "Last 7 days", "All"],
+            index=["Today", "Last 3 days", "Last 7 days", "All"].index(stored["date_range"]),
         )
-        application_status = fourth.selectbox(
-            "Application state", ["All", *[item.value for item in ApplicationStatus]]
-        )
+        location_search = third.text_input("City / location", value=stored["location_search"])
+        search = fourth.text_input("Title / company keyword", value=stored["search"])
         fifth, sixth, seventh, eighth = st.columns(4)
-        authority = fifth.selectbox("Fit authority", ["All", "authoritative", "prefilter_only"])
-        language = sixth.selectbox("Detected language", ["All", "en", "de", "unknown"])
-        logical_only = seventh.toggle("One row per logical vacancy", value=True)
-        sort_by = eighth.selectbox(
-            "Sort by", ["rank_score", "fit_score", "published_at", "last_seen_at", "title", "company"]
+        application_status = fifth.selectbox(
+            "Application status",
+            ["All", *[item.value for item in ApplicationStatus]],
+            index=["All", *[item.value for item in ApplicationStatus]].index(
+                stored["application_status"]
+            ),
         )
-        descending = st.toggle("Descending", value=True)
-        score_filter = st.toggle("Apply score ranges", value=False)
-        if score_filter:
-            fit_range = st.slider("Fit score", 0.0, 100.0, (0.0, 100.0))
-            rank_range = st.slider("Rank score", 0.0, 120.0, (0.0, 120.0))
-        else:
-            fit_range = rank_range = (None, None)
-
-    page = int(st.number_input("Page", min_value=1, value=1, step=1))
+        rank_min = sixth.number_input(
+            "Minimum rank score", min_value=0.0, max_value=120.0,
+            value=float(stored["rank_min"]), step=1.0,
+        )
+        fit_min = seventh.number_input(
+            "Minimum fit score", min_value=0.0, max_value=100.0,
+            value=float(stored["fit_min"]), step=1.0,
+        )
+        authority = eighth.selectbox(
+            "Match type",
+            ["All", "Full analysis", "Quick match only"],
+            index=["All", "Full analysis", "Quick match only"].index(stored["authority"]),
+        )
+        include_prefilter_only = st.checkbox(
+            "Include quick-match-only jobs",
+            value=bool(stored["include_prefilter_only"]),
+        )
+        submitted = st.form_submit_button("Apply Filters", type="primary")
+    if submitted:
+        stored = {
+            "source": source,
+            "date_range": date_range,
+            "location_search": location_search,
+            "search": search,
+            "application_status": application_status,
+            "rank_min": rank_min,
+            "fit_min": fit_min,
+            "authority": authority,
+            "include_prefilter_only": include_prefilter_only,
+            "page": 1,
+        }
+        st.session_state["review_jobs_filters"] = stored
+    page = int(st.number_input(
+        "Page", min_value=1, value=int(stored.get("page", 1)), step=1,
+        key="review_jobs_page",
+    ))
+    if page != stored.get("page", 1):
+        stored = {**stored, "page": page}
+        st.session_state["review_jobs_filters"] = stored
+    authority_filter = {
+        "Full analysis": "authoritative",
+        "Quick match only": "prefilter_only",
+    }.get(stored["authority"])
     filters = JobFilters(
-        search=search, source=None if source == "All" else source,
-        completeness=None if completeness == "All" else completeness,
-        language=None if language == "All" else language,
-        application_status=None if application_status == "All" else application_status,
-        authority=None if authority == "All" else authority,
-        fit_min=fit_range[0], fit_max=fit_range[1],
-        rank_min=rank_range[0], rank_max=rank_range[1],
-        logical_only=logical_only, sort_by=sort_by,
-        descending=descending, page=page,
+        search=stored["search"],
+        location_search=stored["location_search"],
+        source=None if stored["source"] == "All" else stored["source"],
+        application_status=(
+            None if stored["application_status"] == "All"
+            else stored["application_status"]
+        ),
+        authority=authority_filter,
+        date_from=date_range_start(stored["date_range"]),
+        include_prefilter_only=bool(stored["include_prefilter_only"]),
+        fit_min=float(stored["fit_min"]) if float(stored["fit_min"]) > 0 else None,
+        rank_min=float(stored["rank_min"]) if float(stored["rank_min"]) > 0 else None,
+        logical_only=True,
+        sort_by="posted_or_first_seen",
+        descending=True,
+        page=page,
     )
     try:
         result = cached_jobs(
@@ -270,37 +357,417 @@ def jobs_page() -> None:
     except Exception as error:
         safe_error(error)
         return
-        st.caption(f"{result.total} matching rows | page {result.page} of {result.pages}")
+    st.caption(f"{result.total} matching rows | page {result.page} of {result.pages}")
     if not result.items:
         st.info("No jobs match these filters. Try source-record view or remove a filter.")
         return
     display = []
     for item in result.items:
-        row = asdict(item)
-        row["application_statuses"] = ", ".join(item.application_statuses)
+        row = job_row(item)
+        row["job_id"] = item.job_id
         display.append(row)
-    st.dataframe(display, use_container_width=True, hide_index=True)
+    edited = st.data_editor(
+        display,
+        use_container_width=True,
+        hide_index=True,
+        disabled=[
+            "Posted / First Seen", "Title", "Company", "City", "Source",
+            "Match Type", "Rank Score", "Fit Score", "Application Status",
+        ],
+        column_config={
+            "Select": st.column_config.CheckboxColumn(required=True),
+            "job_id": None,
+        },
+        key="review_jobs_table",
+    )
     options = [item.job_id for item in result.items]
     selected = st.selectbox(
-        "Select a job for Job Detail",
+        "Selected job",
         options,
+        index=options.index(_selected_job_id()) if _selected_job_id() in options else 0,
+        format_func=lambda value: _job_option_label(result.items, value),
+    )
+    action_columns = st.columns(3)
+    if action_columns[0].button("Open Job Detail", type="primary"):
+        _set_selected_job(selected)
+        st.success("Selected. Open Job Detail from the navigation.")
+    selected_rows = [row["job_id"] for row in edited if row.get("Select")]
+    if action_columns[1].button("Add selected to Review Tray"):
+        if not _profile_id():
+            st.warning("Select a candidate profile before adding jobs to the Review Tray.")
+        elif not selected_rows:
+            st.warning("Tick one or more jobs first.")
+        else:
+            try:
+                result_rows = execute_once(
+                    f"review-tray:{_profile_id()}:{','.join(selected_rows)}",
+                    lambda: context.actions.add_to_review_tray(selected_rows, _profile_id()),
+                )
+                if result_rows is not None:
+                    st.success(f"Added {len(result_rows)} job(s) to the Review Tray.")
+            except Exception as error:
+                safe_error(error)
+    if action_columns[2].button("Set selected job"):
+        _set_selected_job(selected)
+        st.success("Selected job is shared with Job Detail and CV Workflow.")
+
+
+def review_tray_page() -> None:
+    context = runtime()
+    page_header(
+        "Review Tray",
+        "Your working list for jobs worth a closer look before CV generation and manual application.",
+        eyebrow="Next actions",
+    )
+    profile_id = _profile_id()
+    if not profile_id:
+        st.info("Select a candidate profile before using the Review Tray.")
+        return
+    tray = context.queries.applications(profile_id, ApplicationStatus.SHORTLISTED.value)
+    if not tray:
+        st.info("Your Review Tray is empty. Add jobs from Review Jobs.")
+        return
+    st.dataframe([tray_row(item) for item in tray], use_container_width=True, hide_index=True)
+    selected_application_id = st.selectbox(
+        "Tray job",
+        [str(item["id"]) for item in tray],
         format_func=lambda value: next(
-            f"{item.title} | {item.company or 'Unknown company'} | {item.source}"
-            for item in result.items if item.job_id == value
+            f"{item['title_raw']} | {item.get('company_raw') or 'Unknown company'} | "
+            f"{parse_city(item.get('location_raw'))}"
+            for item in tray if str(item["id"]) == value
         ),
     )
-    if st.button("Set as selected job", type="primary"):
-        st.session_state["selected_job_id"] = selected
-        st.success("Selected. Open Job Detail from the navigation.")
+    selected_application = next(
+        item for item in tray if str(item["id"]) == selected_application_id
+    )
+    selected_job = str(selected_application["job_id"])
+    _set_selected_job(selected_job)
+    st.caption("Selected job is shared with Job Detail, CV Workflow, and command sections.")
+    commands = {
+        "Generate CV": (
+            f"python -m app.cli cv generate --job-id {selected_job} "
+            f"--profile-id {profile_id}"
+        ),
+        "Create Prep Pack": context.queries.prep_pack_command(profile_id, selected_job),
+        "Create Application Pack": context.queries.application_pack_command(
+            profile_id,
+            selected_job,
+            selected_application.get("cv_artifact_id")
+            or selected_application.get("latest_cv_artifact_id"),
+        ),
+    }
+    command_tab, action_tab = st.tabs(["Commands", "Application Actions"])
+    with command_tab:
+        for label, command in commands.items():
+            st.markdown(f"**{label}**")
+            st.code(command, language="powershell")
+        st.caption("Commands are local-only. The dashboard does not apply, send, or call AI automatically.")
+    with action_tab:
+        note = st.text_input("Action note", key="review-tray-action-note")
+        follow_up = st.date_input(
+            "Follow-up date",
+            value=default_follow_up_date(),
+            key="review-tray-follow-up",
+        )
+        confirmed = st.checkbox("Confirm selected Review Tray action")
+        columns = st.columns(4)
+        if columns[0].button("Open Job Detail", type="primary"):
+            _set_selected_job(selected_job)
+            st.success("Selected. Open Job Detail from the navigation.")
+        if columns[1].button("Remove from Tray / Skip"):
+            if not confirmed:
+                st.warning("Confirm before removing this job from the Review Tray.")
+            else:
+                try:
+                    result = execute_once(
+                        f"review-tray-skip:{selected_application_id}",
+                        lambda: context.actions.set_application_status(
+                            selected_job,
+                            profile_id,
+                            ApplicationStatus.SKIPPED.value,
+                            note=note or "Removed from Review Tray",
+                        ),
+                    )
+                    if result:
+                        st.success("Job removed from the Review Tray.")
+                except Exception as error:
+                    safe_error(error)
+        if columns[2].button("Mark Applied"):
+            if not confirmed:
+                st.warning("Confirm after you have manually applied on the external website.")
+            else:
+                try:
+                    result = execute_once(
+                        f"review-tray-applied:{selected_job}:{follow_up.isoformat()}",
+                        lambda: context.actions.submit_manual_application(
+                            selected_job,
+                            profile_id,
+                            note=note or "Marked applied from Review Tray",
+                            follow_up_date=follow_up.isoformat(),
+                        ),
+                    )
+                    if result:
+                        st.success("Application marked applied and follow-up saved.")
+                except Exception as error:
+                    safe_error(error)
+        if columns[3].button("Set Follow-up"):
+            if not confirmed:
+                st.warning("Confirm before changing the follow-up date.")
+            else:
+                try:
+                    result = execute_once(
+                        f"review-tray-follow-up:{selected_application_id}:{follow_up.isoformat()}",
+                        lambda: context.actions.set_application_follow_up(
+                            selected_application_id,
+                            follow_up.isoformat(),
+                            note=note or None,
+                        ),
+                    )
+                    if result:
+                        st.success("Follow-up saved.")
+                except Exception as error:
+                    safe_error(error)
+
+
+def _render_job_detail_action_center(context) -> None:
+    candidates = context.queries.jobs(
+        JobFilters(logical_only=False, page_size=100), _profile_id()
+    ).items
+    if not candidates:
+        st.info("No stored jobs are available.")
+        return
+    options = [item.job_id for item in candidates]
+    current = _selected_job_id()
+    selected = st.selectbox(
+        "Job",
+        options,
+        index=options.index(current) if current in options else 0,
+        format_func=lambda value: _job_option_label(candidates, value),
+        key="job_detail_selector",
+    )
+    _set_selected_job(selected)
+    try:
+        detail = context.queries.job_detail(selected, _profile_id())
+    except Exception as error:
+        safe_error(error)
+        return
+    job = detail.job
+    analysis = detail.analysis or {}
+    ranking = detail.ranking or {}
+    applications = detail.applications
+    current_status = str(applications[0]["current_status"]) if applications else ""
+    title = str(job.get("title_raw") or "Untitled job")
+    company = str(job.get("company_raw") or "Unknown company")
+    city = parse_city(job.get("location_raw"))
+    st.subheader(title)
+    st.caption(f"{company} | {city or 'Location not supplied'} | {job['source']}")
+    top = st.columns(6)
+    top[0].metric(
+        "Posted / First Seen",
+        posted_or_first_seen_display(
+            job.get("published_at"), job.get("first_seen_at"), job.get("created_at")
+        ),
+    )
+    top[1].metric("Match Type", match_type_label(analysis.get("authority")))
+    top[2].metric("Rank Score", ranking.get("rank_score") or "")
+    top[3].metric(
+        "Fit Score",
+        fit_score_label(analysis.get("authority"), analysis.get("fit_score")),
+    )
+    top[4].metric("Application Status", current_status or "Not tracked")
+    top[5].metric("Source", str(job["source"]))
+    link = job.get("canonical_url") or job.get("source_url")
+    if link:
+        st.link_button("Open original vacancy", str(link))
+    compatibility, description_tab, cv_tab, application_tab, advanced = st.tabs([
+        "Compatibility / Why this job",
+        "Job Description",
+        "CV Actions",
+        "Application Actions",
+        "Advanced Details",
+    ])
+    with compatibility:
+        if analysis:
+            st.json({
+                "authority": analysis.get("authority"),
+                "fit_score": analysis.get("fit_score"),
+                "prefilter_score": analysis.get("prefilter_score"),
+                "requirements": analysis.get("requirements"),
+                "evidence": analysis.get("evidence"),
+                "missing_skills": analysis.get("missing_skills"),
+                "risk_flags": analysis.get("risk_flags"),
+            })
+        else:
+            st.info("No analysis exists for the selected profile and job.")
+            if _profile_id() and st.button("Run deterministic analysis"):
+                try:
+                    result = execute_once(
+                        f"analysis:{selected}:{_profile_id()}",
+                        lambda: context.actions.analyze_job(selected, _profile_id()),
+                    )
+                    if result:
+                        st.success("Analysis complete. Refresh the page to inspect it.")
+                except Exception as error:
+                    safe_error(error)
+        if ranking:
+            st.markdown("**Latest ranking**")
+            st.json(ranking)
+    with description_tab:
+        if detail.description:
+            st.caption(f"Completeness: {detail.description['completeness']}")
+            st.text_area(
+                "Stored description",
+                detail.description.get("raw_text") or "No description text stored.",
+                height=360,
+                disabled=True,
+            )
+        else:
+            st.info("No description version is stored. Use manual JD in CV Workflow.")
+    with cv_tab:
+        profile_id = _profile_id()
+        if not profile_id:
+            st.info("Select a candidate profile to generate CV commands.")
+        else:
+            st.markdown("**Generate CV**")
+            st.code(
+                f"python -m app.cli cv generate --job-id {selected} --profile-id {profile_id}",
+                language="powershell",
+            )
+            st.markdown("**Optional AI polish, explicit live AI only**")
+            st.code(
+                "python -m app.cli cv generate "
+                f"--job-id {selected} --profile-id {profile_id} "
+                "--force-regenerate --ai-polish --live-ai",
+                language="powershell",
+            )
+            if st.button("Generate local rule-based CV"):
+                try:
+                    result = execute_once(
+                        f"job-detail-cv:{selected}:{profile_id}",
+                        lambda: context.actions.generate_cv(selected, profile_id),
+                    )
+                    if result:
+                        st.session_state["last_cv_result"] = _cv_result(result)
+                        st.success("Rule-based CV generated locally.")
+                except Exception as error:
+                    safe_error(error)
+        if detail.cv_artifacts:
+            st.markdown("**Latest CV artifacts**")
+            st.dataframe(detail.cv_artifacts, use_container_width=True, hide_index=True)
+        else:
+            st.info("No CV artifacts are linked to this vacancy.")
+    with application_tab:
+        profile_id = _profile_id()
+        if not profile_id:
+            st.info("Select a candidate profile before application actions.")
+        else:
+            selected_cv = _selected_cv_artifact_id(detail)
+            st.markdown("**Local preparation commands**")
+            st.code(context.queries.prep_pack_command(profile_id, selected, selected_cv), language="powershell")
+            st.code(context.queries.application_pack_command(profile_id, selected, selected_cv), language="powershell")
+            for row in context.queries.communication_draft_commands(profile_id, selected):
+                st.code(row["command"], language="powershell")
+            st.caption("These commands create local files only. They do not apply, upload, send, or call AI.")
+            note = st.text_input("Application action note", key="job-detail-action-note")
+            follow_up = st.date_input(
+                "Follow-up date",
+                value=default_follow_up_date(),
+                key="job-detail-follow-up",
+            )
+            confirmed = st.checkbox("Confirm selected application action")
+            actions = st.columns(4)
+            if actions[0].button("Add to Review Tray", type="primary"):
+                try:
+                    result = execute_once(
+                        f"job-detail-review-tray:{selected}:{profile_id}",
+                        lambda: context.actions.add_to_review_tray([selected], profile_id),
+                    )
+                    if result:
+                        st.success("Added to Review Tray.")
+                except Exception as error:
+                    safe_error(error)
+            if actions[1].button("Create Prep Pack"):
+                if not confirmed:
+                    st.warning("Confirm before creating a local prep pack.")
+                else:
+                    try:
+                        result = execute_once(
+                            f"job-detail-prep:{selected}:{profile_id}:{selected_cv}",
+                            lambda: context.actions.create_prep_pack(
+                                selected, profile_id, cv_artifact_id=selected_cv
+                            ),
+                        )
+                        if result:
+                            st.success("Prep pack created locally.")
+                    except Exception as error:
+                        safe_error(error)
+            if actions[2].button("Create Application Pack"):
+                if not confirmed:
+                    st.warning("Confirm before creating a local application pack.")
+                else:
+                    try:
+                        result = execute_once(
+                            f"job-detail-application-pack:{selected}:{profile_id}:{selected_cv}",
+                            lambda: context.actions.create_application_pack(
+                                selected, profile_id, cv_artifact_id=selected_cv
+                            ),
+                        )
+                        if result:
+                            st.success("Application pack created locally.")
+                    except Exception as error:
+                        safe_error(error)
+            if actions[3].button("Mark Applied"):
+                if not confirmed:
+                    st.warning("Confirm only after you manually applied externally.")
+                else:
+                    try:
+                        result = execute_once(
+                            f"job-detail-applied:{selected}:{profile_id}:{follow_up.isoformat()}",
+                            lambda: context.actions.submit_manual_application(
+                                selected,
+                                profile_id,
+                                note=note or "Marked applied from dashboard",
+                                follow_up_date=follow_up.isoformat(),
+                            ),
+                        )
+                        if result:
+                            st.success("Marked applied and follow-up saved.")
+                    except Exception as error:
+                        safe_error(error)
+            if detail.applications:
+                st.markdown("**Application record**")
+                st.dataframe(detail.applications, use_container_width=True, hide_index=True)
+                st.markdown("**Immutable history**")
+                st.dataframe(detail.application_history, use_container_width=True, hide_index=True)
+    with advanced:
+        safe_fields = {
+            key: job.get(key) for key in (
+                "id", "source", "source_job_id", "published_at", "expires_at",
+                "employment_type", "language_detected", "language_confidence",
+                "explicit_german_requirement", "first_seen_at", "last_seen_at",
+                "created_at", "active",
+            )
+        }
+        st.markdown("**Source metadata and technical IDs**")
+        st.json(safe_fields)
+        if detail.cluster:
+            st.markdown("**Duplicate provenance**")
+            st.json(detail.cluster)
+            st.dataframe(detail.cluster_members, use_container_width=True, hide_index=True)
+        if detail.notifications:
+            st.markdown("**Notification history**")
+            st.dataframe(detail.notifications, use_container_width=True, hide_index=True)
 
 
 def job_detail_page() -> None:
     context = runtime()
     page_header(
         "Job Detail",
-        "The complete evidence trail for one vacancy, from source record to application and CV history.",
+        "A practical action center for one selected vacancy.",
         eyebrow="Decision record",
     )
+    _render_job_detail_action_center(context)
+    return
     candidates = context.queries.jobs(
         JobFilters(logical_only=False, page_size=100), _profile_id()
     ).items
@@ -785,11 +1252,17 @@ def cv_builder_page() -> None:
             selected = st.selectbox(
                 "Stored job",
                 [item.job_id for item in jobs],
+                index=(
+                    [item.job_id for item in jobs].index(_selected_job_id())
+                    if _selected_job_id() in [item.job_id for item in jobs]
+                    else 0
+                ),
                 format_func=lambda value: next(
                     f"{item.title} | {item.company or 'Unknown company'}"
                     for item in jobs if item.job_id == value
                 ),
             )
+            _set_selected_job(selected)
             if st.button("Generate authoritative CV", type="primary"):
                 try:
                     result = execute_once(
@@ -830,6 +1303,18 @@ def cv_builder_page() -> None:
     if result:
         st.subheader("Latest generation result")
         st.json(result)
+        if result.get("job_id"):
+            st.markdown("**Suggested next steps**")
+            st.code(
+                f"python -m app.cli prep pack --job-id {result['job_id']} "
+                f"--profile-id {result['profile_id']} --cv-artifact-id {result['artifact_id']}",
+                language="powershell",
+            )
+            st.code(
+                f"python -m app.cli application-pack create --job-id {result['job_id']} "
+                f"--profile-id {result['profile_id']} --cv-artifact-id {result['artifact_id']}",
+                language="powershell",
+            )
         st.markdown(
             '<div class="status-note"><strong>Private evidence report:</strong> '
             "Use it for verification only; it is not recruiter-facing content.</div>",

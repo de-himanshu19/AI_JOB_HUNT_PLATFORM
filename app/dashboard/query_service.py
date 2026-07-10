@@ -39,6 +39,7 @@ from app.dashboard.view_models import (
 SORT_COLUMNS = {
     "rank_score": "rank_score",
     "fit_score": "fit_score",
+    "posted_or_first_seen": "COALESCE(j.published_at, j.first_seen_at, j.created_at)",
     "published_at": "j.published_at",
     "last_seen_at": "j.last_seen_at",
     "title": "j.title_normalized",
@@ -153,7 +154,7 @@ class DashboardQueryService:
         page = max(1, filters.page)
         profile = str(profile_id or "")
         where = []
-        parameters: list[object] = [profile, profile, profile, profile]
+        where_parameters: list[object] = []
         if filters.active_only:
             where.append("j.active = 1")
         if filters.logical_only:
@@ -161,10 +162,15 @@ class DashboardQueryService:
         if filters.search.strip():
             needle = f"%{filters.search.strip().casefold()}%"
             where.append(
-                "(LOWER(j.title_raw) LIKE ? OR LOWER(COALESCE(j.company_raw, '')) LIKE ? "
-                "OR LOWER(COALESCE(j.location_raw, '')) LIKE ?)"
+                "(LOWER(j.title_raw) LIKE ? OR LOWER(COALESCE(j.company_raw, '')) LIKE ?)"
             )
-            parameters.extend((needle, needle, needle))
+            where_parameters.extend((needle, needle))
+        if filters.location_search.strip():
+            needle = f"%{filters.location_search.strip().casefold()}%"
+            where.append(
+                "(LOWER(COALESCE(j.location_raw, '')) LIKE ? OR LOWER(COALESCE(j.city, '')) LIKE ?)"
+            )
+            where_parameters.extend((needle, needle))
         for value, clause in (
             (filters.source, "j.source = ?"),
             (filters.completeness, "COALESCE(ld.completeness, 'missing') = ?"),
@@ -172,15 +178,20 @@ class DashboardQueryService:
         ):
             if value:
                 where.append(clause)
-                parameters.append(value)
+                where_parameters.append(value)
+        if filters.date_from:
+            where.append("COALESCE(j.published_at, j.first_seen_at, j.created_at) >= ?")
+            where_parameters.append(filters.date_from)
+        if not filters.include_prefilter_only:
+            where.append("COALESCE(la.authority, '') != 'prefilter_only'")
         if filters.language == "unknown":
             where.append("(j.language_detected IS NULL OR j.language_detected = '')")
         elif filters.language:
             where.append("j.language_detected = ?")
-            parameters.append(filters.language)
+            where_parameters.append(filters.language)
         if filters.application_status:
             where.append("(',' || COALESCE(app.statuses, '') || ',') LIKE ?")
-            parameters.append(f"%,{filters.application_status},%")
+            where_parameters.append(f"%,{filters.application_status},%")
         for value, clause in (
             (filters.fit_min, "la.fit_score >= ?"),
             (filters.fit_max, "la.fit_score <= ?"),
@@ -189,7 +200,7 @@ class DashboardQueryService:
         ):
             if value is not None:
                 where.append(clause)
-                parameters.append(value)
+                where_parameters.append(value)
         where_sql = " AND ".join(where) if where else "1 = 1"
         sort_column = SORT_COLUMNS.get(filters.sort_by, SORT_COLUMNS["rank_score"])
         direction = "DESC" if filters.descending else "ASC"
@@ -227,7 +238,8 @@ class DashboardQueryService:
                 COALESCE(ld.completeness, 'missing') AS completeness,
                 j.language_detected, j.explicit_german_requirement,
                 la.authority, la.fit_score, lr.rank_score, app.statuses,
-                j.published_at, j.last_seen_at, COUNT(*) OVER() AS total_count
+                j.published_at, j.first_seen_at, j.last_seen_at, j.created_at,
+                COUNT(*) OVER() AS total_count
             FROM jobs j JOIN job_keys jk ON jk.job_id = j.id
             LEFT JOIN latest_description ld ON ld.job_id = j.id AND ld.rn = 1
             LEFT JOIN latest_analysis la ON la.job_id = j.id AND la.rn = 1
@@ -238,9 +250,18 @@ class DashboardQueryService:
                 j.title_normalized, j.company_normalized, j.id
             LIMIT ? OFFSET ?
         """
-        # Four parameters belong to the profile-aware CTEs after the dedup version.
-        parameters = [DEDUPLICATION_VERSION, *parameters[:4], profile, profile, *parameters[4:]]
-        parameters.extend((page_size, (page - 1) * page_size))
+        parameters = [
+            DEDUPLICATION_VERSION,
+            profile,
+            profile,
+            profile,
+            profile,
+            profile,
+            profile,
+            *where_parameters,
+            page_size,
+            (page - 1) * page_size,
+        ]
         with self.database.read_connection() as connection:
             rows = connection.execute(sql, parameters).fetchall()
         total = int(rows[0]["total_count"]) if rows else 0
@@ -256,7 +277,8 @@ class DashboardQueryService:
             application_statuses=tuple(sorted(filter(
                 None, (row["statuses"] or "").split(",")
             ))),
-            published_at=row["published_at"], last_seen_at=row["last_seen_at"],
+            published_at=row["published_at"], first_seen_at=row["first_seen_at"],
+            last_seen_at=row["last_seen_at"], created_at=row["created_at"],
         ) for row in rows)
         return PageResult(items=items, total=total, page=page, page_size=page_size)
 
@@ -397,6 +419,32 @@ class DashboardQueryService:
                     a.follow_up_date, a.cv_artifact_id, a.source AS application_source,
                     a.created_at, a.updated_at,
                     j.title_raw, j.company_raw, j.location_raw, j.source,
+                    j.published_at, j.first_seen_at, j.created_at AS job_created_at,
+                    COALESCE((
+                        SELECT jd.completeness FROM job_descriptions jd
+                        WHERE jd.job_id = a.job_id
+                        ORDER BY jd.fetched_at DESC, jd.created_at DESC, jd.id DESC
+                        LIMIT 1
+                    ), 'missing') AS description_completeness,
+                    COALESCE((
+                        SELECT ja.authority FROM job_analyses ja
+                        WHERE ja.profile_id = a.profile_id
+                          AND ja.job_id = a.job_id
+                        ORDER BY ja.created_at DESC, ja.id DESC
+                        LIMIT 1
+                    ), (
+                        SELECT ja.authority
+                        FROM job_rankings jr
+                        JOIN job_analyses ja ON ja.id = jr.analysis_id
+                        WHERE jr.profile_id = a.profile_id
+                          AND (
+                            jr.job_id = a.job_id OR
+                            (a.logical_cluster_id IS NOT NULL
+                             AND jr.cluster_id = a.logical_cluster_id)
+                          )
+                        ORDER BY jr.created_at DESC, jr.id DESC
+                        LIMIT 1
+                    )) AS authority,
                     (
                         SELECT c.id FROM cv_generation_artifacts c
                         WHERE c.profile_id = a.profile_id

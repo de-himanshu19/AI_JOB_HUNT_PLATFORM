@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -155,6 +156,34 @@ def test_attach_cv_action_delegates_to_application_service(tmp_path) -> None:
     with database.read_connection() as connection:
         stored = ApplicationRepository(connection).get(tracked.id)
         assert stored.status is ApplicationStatus.CV_READY
+
+
+def test_review_tray_action_shortlists_with_safe_dashboard_metadata(tmp_path) -> None:
+    settings, database, profile, job = _context(tmp_path)
+    actions = DashboardActions(database, settings)
+
+    result = actions.add_to_review_tray([job.id], profile.id)
+
+    assert len(result) == 1
+    assert result[0].status is ApplicationStatus.SHORTLISTED
+    assert result[0].priority.value == "medium"
+    assert "Added to review tray from dashboard" in (result[0].notes or "")
+
+
+def test_submit_manual_application_defaults_follow_up_to_seven_days(tmp_path) -> None:
+    settings, database, profile, job = _context(tmp_path)
+    actions = DashboardActions(database, settings)
+
+    result = actions.submit_manual_application(
+        job.id,
+        profile.id,
+        note="Applied manually after external submission",
+    )
+
+    expected = (datetime.now(UTC).date() + timedelta(days=7)).isoformat()
+    assert result.status is ApplicationStatus.APPLIED
+    assert result.follow_up_date.isoformat() == expected
+    assert "Applied manually after external submission" in (result.notes or "")
 
 
 def test_notification_preview_is_offline_and_does_not_create_batches(tmp_path) -> None:

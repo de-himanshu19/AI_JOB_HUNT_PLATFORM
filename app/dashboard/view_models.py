@@ -34,18 +34,21 @@ class ProfileSummary:
 @dataclass(frozen=True)
 class JobFilters:
     search: str = ""
+    location_search: str = ""
     source: str | None = None
     completeness: str | None = None
     language: str | None = None
     application_status: str | None = None
     authority: str | None = None
+    date_from: str | None = None
+    include_prefilter_only: bool = True
     fit_min: float | None = None
     fit_max: float | None = None
     rank_min: float | None = None
     rank_max: float | None = None
     logical_only: bool = True
     active_only: bool = True
-    sort_by: str = "rank_score"
+    sort_by: str = "posted_or_first_seen"
     descending: bool = True
     page: int = 1
     page_size: int = 25
@@ -69,7 +72,9 @@ class JobListItem:
     rank_score: float | None
     application_statuses: tuple[str, ...] = ()
     published_at: str | None = None
+    first_seen_at: str | None = None
     last_seen_at: str | None = None
+    created_at: str | None = None
 
 
 @dataclass(frozen=True)

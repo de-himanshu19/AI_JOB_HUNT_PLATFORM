@@ -115,11 +115,31 @@ not a commitment to implement future items automatically.
 - Dashboard Job Detail shows exact draft commands and latest local draft files
   passively.
 
+### M22: Portfolio Final Release And Cleanup
+
+- Portfolio/demo documentation and release-readiness cleanup.
+- Safety, local-first boundaries, ignored runtime artifacts, and future roadmap
+  remain explicit for public review.
+
+### M23: Daily Review Tray And Dashboard UX Workflow
+
+- Review Jobs page with deliberate Apply Filters behavior and user-friendly
+  Posted / First Seen, City, Match Type, Rank Score, Fit Score, and Application
+  Status columns.
+- Review Tray page backed by existing shortlist application tracking, displayed
+  as a practical working queue rather than a technical status.
+- Shared selected job state across Review Jobs, Review Tray, Job Detail, and CV
+  Workflow.
+- Job Detail action center for compatibility review, description review, CV
+  commands/actions, manual application tracking, and advanced diagnostics.
+- Mark Applied dashboard actions suggest a seven-day follow-up date and remain
+  explicit local CRM updates only.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
   permitted.
-- Improve scheduler observability and daily-run review.
+- Improve scheduler observability and daily-run review history summaries.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the shared adapter contract.
 - Improve analytics calibration with reviewed outcomes and longer trend windows.

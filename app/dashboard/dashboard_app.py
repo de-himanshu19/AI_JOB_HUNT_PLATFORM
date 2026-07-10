@@ -12,6 +12,7 @@ from app.dashboard.pages import (
     jobs_page,
     notifications_page,
     overview_page,
+    review_tray_page,
     runs_page,
 )
 from app.dashboard.runtime import runtime
@@ -29,24 +30,23 @@ def main() -> None:
     context = runtime()
     profile_picker(context)
     pages = {
-        "Review": [
-            st.Page(overview_page, title="Overview", url_path="overview", default=True),
+        "Daily Workflow": [
+            st.Page(overview_page, title="Daily Runs", url_path="overview", default=True),
+            st.Page(jobs_page, title="Review Jobs", url_path="jobs"),
+            st.Page(review_tray_page, title="Review Tray", url_path="review-tray"),
+            st.Page(job_detail_page, title="Job Detail", url_path="job-detail"),
+            st.Page(cv_builder_page, title="CV Workflow", url_path="cv-builder"),
+            st.Page(applications_page, title="Applications", url_path="applications"),
             st.Page(
                 analytics_page,
-                title="Applications Analytics",
+                title="Analytics",
                 url_path="applications-analytics",
             ),
-            st.Page(jobs_page, title="Jobs", url_path="jobs"),
-            st.Page(job_detail_page, title="Job Detail", url_path="job-detail"),
+        ],
+        "Advanced / Diagnostics": [
             st.Page(duplicate_review_page, title="Duplicate Review", url_path="duplicates"),
-        ],
-        "Prepare": [
-            st.Page(applications_page, title="Applications", url_path="applications"),
-            st.Page(cv_builder_page, title="CV Workflow", url_path="cv-builder"),
             st.Page(notifications_page, title="Notifications", url_path="notifications"),
-        ],
-        "Operate": [
-            st.Page(runs_page, title="Runs & Diagnostics", url_path="runs"),
+            st.Page(runs_page, title="Advanced / Diagnostics", url_path="runs"),
         ],
     }
     st.navigation(pages, position="sidebar").run()

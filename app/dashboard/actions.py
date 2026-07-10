@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.config import Settings
@@ -14,11 +14,14 @@ from app.domain.enums import ApplicationStatus
 from app.integrations.ai import build_ai_provider
 from app.integrations.telegram import TelegramClient
 from app.services.analysis_rules import AnalysisRules
+from app.services.application_pack import ApplicationPackService
 from app.services.applications import ALLOWED_TRANSITIONS, ApplicationService
+from app.services.communications import CommunicationDraftService
 from app.services.cv_generation import CVGenerationService
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
 from app.services.notifications import NotificationFormatter, NotificationService
+from app.services.prep_pack import PrepPackService
 from app.services.ranking import RankingService
 
 
@@ -74,6 +77,22 @@ class DashboardActions:
             profile_id, job_id, priority=priority, note=note
         )
 
+    def add_to_review_tray(
+        self,
+        job_ids: list[UUID | str] | tuple[UUID | str, ...],
+        profile_id: UUID | str,
+    ) -> list[object]:
+        service = ApplicationService(self.database)
+        return [
+            service.shortlist_job(
+                profile_id,
+                job_id,
+                priority="medium",
+                note="Added to review tray from dashboard",
+            )
+            for job_id in job_ids
+        ]
+
     def set_application_status(
         self,
         job_id: UUID | str,
@@ -119,6 +138,94 @@ class DashboardActions:
             cv_artifact_id=cv_artifact_id,
             note=note,
         )
+
+    def create_prep_pack(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        cv_artifact_id: UUID | str | None = None,
+        force: bool = False,
+    ):
+        return PrepPackService(
+            self.database,
+            default_output_dir=self.settings.data_dir / "prep_packs",
+        ).create_pack(
+            profile_id=profile_id,
+            job_id=job_id,
+            cv_artifact_id=cv_artifact_id,
+            output_format="markdown",
+            force=force,
+        )
+
+    def create_application_pack(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        cv_artifact_id: UUID | str | None = None,
+        force: bool = False,
+    ):
+        return ApplicationPackService(
+            self.database,
+            default_output_dir=self.settings.data_dir / "application_packs",
+            prep_pack_dir=self.settings.data_dir / "prep_packs",
+        ).create_pack(
+            profile_id=profile_id,
+            job_id=job_id,
+            cv_artifact_id=cv_artifact_id,
+            force=force,
+        )
+
+    def create_communication_draft(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        draft_type: str,
+        tone: str = "professional",
+        force: bool = False,
+        record_event: bool = False,
+    ):
+        return CommunicationDraftService(
+            self.database,
+            default_output_dir=self.settings.data_dir / "communication_drafts",
+            prep_pack_dir=self.settings.data_dir / "prep_packs",
+            application_pack_dir=self.settings.data_dir / "application_packs",
+        ).create_draft(
+            profile_id=profile_id,
+            job_id=job_id,
+            draft_type=draft_type,
+            tone=tone,
+            force=force,
+            record_event=record_event,
+        )
+
+    def submit_manual_application(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        note: str | None = None,
+        follow_up_date: str | None = None,
+    ):
+        service = ApplicationService(self.database)
+        application = service.mark_applied(
+            profile_id,
+            job_id,
+            note=note,
+        )
+        follow_up_date = follow_up_date or (
+            datetime.now(UTC).date() + timedelta(days=7)
+        ).isoformat()
+        if follow_up_date:
+            application = service.set_follow_up(
+                profile_id=profile_id,
+                job_id=job_id,
+                follow_up_date=follow_up_date,
+                note="Follow-up date set after manual application submission",
+            )
+        return application
 
     def review_duplicate(
         self, candidate_id: UUID | str, decision: str, *, confirmed: bool
