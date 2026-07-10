@@ -468,6 +468,33 @@ def job_detail_page() -> None:
     else:
         st.info("No CV artifacts are linked to this vacancy.")
 
+    st.subheader("Application prep pack")
+    if not _profile_id():
+        st.info("Select a candidate profile to see the prep-pack command.")
+    else:
+        selected_cv = None
+        if detail.applications:
+            selected_cv = detail.applications[0].get("cv_artifact_id")
+        if not selected_cv and detail.cv_artifacts:
+            selected_cv = detail.cv_artifacts[0].get("id")
+        command = context.queries.prep_pack_command(
+            _profile_id(),
+            selected,
+            selected_cv,
+        )
+        st.code(command, language="powershell")
+        st.caption(
+            "Prep packs are local markdown drafts only. The dashboard does not "
+            "auto-apply, send messages, or call AI when showing this command."
+        )
+        packs = context.queries.latest_prep_packs(
+            context.settings.data_dir / "prep_packs",
+            job_id=selected,
+        )
+        if packs:
+            st.markdown("**Latest local prep packs**")
+            st.dataframe(packs, use_container_width=True, hide_index=True)
+
 
 def duplicate_review_page() -> None:
     context = runtime()

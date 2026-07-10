@@ -32,6 +32,7 @@ from app.services.legacy_import import LegacyImportService
 from app.services.normalization import CompanyAliases
 from app.services.notifications import NotificationFormatter, NotificationService
 from app.services.pipeline import PipelineRunRequest, PipelineService, RankingScope
+from app.services.prep_pack import PrepPackService
 from app.services.ranking import RankingService
 from app.integrations.telegram import TelegramClient
 from app.integrations.ai import build_ai_provider
@@ -299,6 +300,18 @@ def build_parser() -> argparse.ArgumentParser:
     analytics_summary = analytics_commands.add_parser("summary")
     analytics_summary.add_argument("--profile-id", required=True)
     analytics_summary.add_argument("--daily-runs-dir", type=Path)
+
+    prep = commands.add_parser(
+        "prep", help="Generate local evidence-backed application prep packs"
+    )
+    prep_commands = prep.add_subparsers(dest="prep_command", required=True)
+    prep_pack = prep_commands.add_parser("pack")
+    prep_pack.add_argument("--profile-id", required=True)
+    prep_pack.add_argument("--job-id", required=True)
+    prep_pack.add_argument("--cv-artifact-id")
+    prep_pack.add_argument("--output-dir", type=Path)
+    prep_pack.add_argument("--format", choices=["markdown"], default="markdown")
+    prep_pack.add_argument("--force", action="store_true")
 
     applications = commands.add_parser(
         "applications", help="Track job applications locally"
@@ -1130,6 +1143,29 @@ def _analytics(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prep(args: argparse.Namespace) -> int:
+    if args.prep_command != "pack":
+        raise AssertionError("Unhandled prep command")
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    service = PrepPackService(
+        database,
+        default_output_dir=settings.data_dir / "prep_packs",
+    )
+    result = service.create_pack(
+        profile_id=args.profile_id,
+        job_id=args.job_id,
+        cv_artifact_id=args.cv_artifact_id,
+        output_dir=args.output_dir,
+        output_format=args.format,
+        force=args.force,
+    )
+    print(json.dumps(result.as_json(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def _legacy_plan_json(plan: LegacyImportPlan) -> dict[str, object]:
     return {
         "source_type": plan.source_type.value,
@@ -1341,6 +1377,8 @@ def main(argv: list[str] | None = None) -> int:
         return _daily(args)
     if args.command == "analytics":
         return _analytics(args)
+    if args.command == "prep":
+        return _prep(args)
     if args.command == "applications":
         return _applications(args)
     raise AssertionError("Unhandled command")

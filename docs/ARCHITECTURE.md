@@ -21,6 +21,8 @@ flowchart LR
     Analytics --> Dashboard
     Ranking --> Notify["Notification preview"]
     Ranking --> CV["CV generation"]
+    Applications --> Prep["Prep packs"]
+    CV --> Prep
     CV --> Validator["Validation layer"]
     Validator --> Artifacts["Artifact storage"]
     CV --> AI["Optional AI provider"]
@@ -56,6 +58,8 @@ Services contain business workflows and keep page/command code thin:
   reporting.
 - CV generation service creates rule-based artifacts and optional validated AI
   derivatives.
+- Prep pack service creates local markdown application/interview drafts from
+  stored job, profile, analysis, application, and CV artifact evidence.
 - Legacy import service handles backup, dry-run, apply, verify, and reconcile.
 
 ## Repository And Database Layer
@@ -120,3 +124,7 @@ CV validation protects the truthful artifact contract:
 CV text, private evidence reports, AI attempt reports, and imported legacy
 artifacts are stored as local files with database metadata and content hashes.
 Generated artifacts live under ignored runtime paths and should not be committed.
+
+Prep packs are also local generated files under ignored runtime storage
+(`data/prep_packs/`). They are drafts for human review and are not submitted,
+emailed, sent to Telegram, or used to mutate application state by default.

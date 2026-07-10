@@ -28,6 +28,7 @@ data/*.sqlite3-*
 data/artifacts/
 data/pipeline_runs/
 data/daily_runs/
+data/prep_packs/
 data/locks/
 data/logs/
 logs/

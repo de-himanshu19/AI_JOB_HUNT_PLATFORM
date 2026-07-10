@@ -15,6 +15,7 @@ from app.db.repositories import CandidateProfileRepository
 from app.services.analytics import ApplicationAnalyticsService
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION
 from app.services.deduplication import DEDUPLICATION_VERSION
+from app.services.prep_pack import PrepPackService, latest_prep_packs
 from app.dashboard.view_models import (
     DuplicateReviewView,
     JobDetailView,
@@ -595,6 +596,30 @@ class DashboardQueryService:
             self.database,
             daily_runs_dir=daily_runs_dir,
         ).summary(profile_id)
+
+    def prep_pack_command(
+        self,
+        profile_id: UUID | str,
+        job_id: UUID | str,
+        cv_artifact_id: UUID | str | None = None,
+    ) -> str:
+        return PrepPackService(
+            self.database,
+            default_output_dir=Path("data/prep_packs"),
+        ).preview_command(
+            profile_id=profile_id,
+            job_id=job_id,
+            cv_artifact_id=cv_artifact_id,
+        )
+
+    def latest_prep_packs(
+        self,
+        prep_pack_dir: Path | str,
+        *,
+        job_id: UUID | str | None = None,
+        limit: int = 10,
+    ) -> tuple[dict[str, object], ...]:
+        return latest_prep_packs(prep_pack_dir, job_id=job_id, limit=limit)
 
     @staticmethod
     def _decode_description(value):

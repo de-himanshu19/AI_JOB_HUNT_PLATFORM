@@ -228,6 +228,20 @@ python -m app.cli applications cv-ready `
 This links the reviewed artifact to local application tracking and marks the
 record as CV-ready.
 
+## Generate Prep Pack
+
+```powershell
+python -m app.cli prep pack `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --cv-artifact-id <artifact-id>
+```
+
+The prep pack is a local markdown draft under `data/prep_packs/`. It contains a
+job snapshot, fit summary, evidence-backed talking points, recruiter questions,
+checklists, and a cover letter draft. It is not submitted anywhere and must be
+reviewed before applying manually.
+
 ## View History
 
 ```powershell

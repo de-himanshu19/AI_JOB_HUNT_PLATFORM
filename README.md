@@ -43,6 +43,8 @@ flowchart LR
     Ranking --> CV["Rule-based CV generation"]
     Dashboard --> Analytics["Application analytics"]
     Dashboard --> Tracking["Application tracking"]
+    Tracking --> Prep["Prep pack drafts"]
+    CV --> Prep
     CV --> Tracking
     CV --> AI["Optional safe AI polish"]
     AI --> Tracking
@@ -58,7 +60,8 @@ flowchart TD
     Generate --> Polish["Optional AI polish"]
     Polish --> Attach["Attach CV artifact"]
     Generate --> Attach
-    Attach --> Apply["Apply manually outside the app"]
+    Attach --> Prep["Generate prep pack"]
+    Prep --> Apply["Apply manually outside the app"]
     Apply --> FollowUp["Track follow-up and history"]
 ```
 
@@ -91,6 +94,7 @@ flowchart TD
 - Read-only application analytics for funnel progress, source quality,
   follow-ups, daily-run activity, and recent job-search movement.
 - Rule-based FlowCV text generation with private evidence reports.
+- Evidence-backed application/interview prep packs as local markdown drafts.
 - Safe API-based AI CV polish using OpenAI-compatible or native Ollama Cloud
   providers.
 - Protected-fact validation so AI output cannot silently change dates,
@@ -109,6 +113,8 @@ flowchart TD
   `--ai-polish` plus `--live-ai`.
 - The rule-based CV remains the authoritative source of truth.
 - AI artifacts are stored only as separate child artifacts after validation.
+- Prep packs are local drafts only; they are not submitted, emailed, sent, or
+  treated as application actions.
 - `.env`, `data/`, runtime databases, and generated private artifacts are not
   committed.
 - Tests use fixtures and temporary databases; ordinary automated tests do not
@@ -126,6 +132,7 @@ captured and reviewed for public sharing.
 - CV workflow page: `docs/images/cv-workflow-placeholder.png`
 - Application tracking page: `docs/images/application-tracking-placeholder.png`
 - Application analytics page: `docs/images/application-analytics-placeholder.png`
+- Prep pack markdown preview: `docs/images/prep-pack-placeholder.png`
 
 ## Setup
 
@@ -186,6 +193,12 @@ Review application analytics from the CLI:
 
 ```powershell
 python -m app.cli analytics summary --profile-id <profile-id>
+```
+
+Generate a local application/interview prep pack:
+
+```powershell
+python -m app.cli prep pack --profile-id <profile-id> --job-id <job-id>
 ```
 
 Run the local daily wrapper:
@@ -258,6 +271,7 @@ ordinary offline verification path.
 - [CV generation](docs/CV_GENERATION.md)
 - [CV workflow](docs/CV_WORKFLOW.md)
 - [Application tracking](docs/APPLICATION_TRACKING.md)
+- [Prep packs](docs/PREP_PACKS.md)
 - [Legacy import](docs/LEGACY_IMPORT.md)
 
 ## Current Limitations

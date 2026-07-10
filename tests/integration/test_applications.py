@@ -81,7 +81,7 @@ def test_attach_cv_artifact_marks_application_ready_without_duplicate_rows(
             normalized_text=full_text,
             completeness=DescriptionCompleteness.FULL,
             content_hash="b" * 64,
-            fetched_at=datetime(2026, 7, 10, tzinfo=UTC),
+            fetched_at=datetime(2026, 7, 11, tzinfo=UTC),
         ))
     artifact = CVGenerationService(
         database, settings, _rules()

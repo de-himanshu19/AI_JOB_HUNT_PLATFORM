@@ -85,6 +85,15 @@ not a commitment to implement future items automatically.
 - Passive daily-run analytics from saved `data/daily_runs` JSON summaries.
 - CLI JSON summary via `python -m app.cli analytics summary --profile-id <id>`.
 
+### M19: Interview/Application Prep Pack
+
+- Local evidence-backed markdown prep packs for selected jobs/applications.
+- Cover letter draft, interview talking points, recruiter questions, and
+  application checklist without auto-apply or send actions.
+- Prefilter-only discovery packs warn when descriptions are snippet/missing.
+- Dashboard Job Detail shows the exact prep-pack CLI command and latest local
+  prep-pack files passively.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
@@ -93,6 +102,7 @@ not a commitment to implement future items automatically.
 - Add stronger live Telegram safeguards and operator previews.
 - Add more safe job sources behind the shared adapter contract.
 - Improve analytics calibration with reviewed outcomes and longer trend windows.
+- Add richer prep-pack templates after enough reviewed application feedback.
 - Prepare final anonymized deployment/demo packaging with reviewed screenshots
   and fixture data.
 

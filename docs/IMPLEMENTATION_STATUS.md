@@ -234,6 +234,23 @@ External credential rotation remains a manual security gate. No credential value
   Telegram behavior change, application write-behavior change, or
   `existing_projects/` modification was required.
 
+### Migration Milestone 19
+
+- Local prep-pack service generates evidence-backed markdown drafts for a
+  selected job/profile using stored job data, description completeness, fit
+  analysis, ranking, application metadata, candidate evidence, and CV artifact
+  metadata.
+- CLI `prep pack --profile-id <id> --job-id <id>` writes ignored local files
+  under `data/prep_packs/` by default and returns JSON with output path,
+  authority, selected CV artifact, and warnings.
+- Authoritative jobs receive fuller fit and interview guidance; snippet/missing
+  jobs are clearly marked as `prefilter_only` discovery packs.
+- Job Detail shows the exact prep-pack CLI command and latest local prep-pack
+  files passively without generating files on page load.
+- No auto-apply, email, Telegram send, live AI call, schema migration, scoring
+  change, source-adapter change, CV/AI validation change, application write
+  behavior change, or `existing_projects/` modification was required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -280,6 +297,9 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 18: read-only analytics service, CLI summary command, dashboard
   Applications Analytics page, safe daily-run summary parsing, focused tests,
   and docs.
+- Milestone 19: prep-pack service, CLI command, dashboard read-only command/file
+  visibility, ignored `data/prep_packs/` output path, focused tests, and
+  `docs/PREP_PACKS.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
