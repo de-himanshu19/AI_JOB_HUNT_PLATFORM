@@ -30,6 +30,7 @@ data/pipeline_runs/
 data/daily_runs/
 data/prep_packs/
 data/application_packs/
+data/communication_drafts/
 data/locks/
 data/logs/
 logs/

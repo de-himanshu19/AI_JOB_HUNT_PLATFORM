@@ -48,6 +48,7 @@ flowchart LR
     CV --> Prep
     CV --> AppPack
     CV --> Tracking
+    Tracking --> Comms["Communication drafts"]
     CV --> AI["Optional safe AI polish"]
     AI --> Tracking
 ```
@@ -65,7 +66,8 @@ flowchart TD
     Attach --> Prep["Generate prep pack"]
     Prep --> Package["Create application package"]
     Package --> Apply["Apply manually outside the app"]
-    Apply --> FollowUp["Track follow-up and history"]
+    Apply --> Comms["Draft follow-up or replies"]
+    Comms --> FollowUp["Track follow-up and history"]
 ```
 
 ## Tech Stack
@@ -100,6 +102,8 @@ flowchart TD
 - Evidence-backed application/interview prep packs as local markdown drafts.
 - Manual application packages with checklists, notes, CV references, and
   follow-up plan.
+- Local communication drafts for follow-ups, recruiter replies, interview
+  scheduling, thank-you notes, rejection responses, and status updates.
 - Safe API-based AI CV polish using OpenAI-compatible or native Ollama Cloud
   providers.
 - Protected-fact validation so AI output cannot silently change dates,
@@ -122,6 +126,8 @@ flowchart TD
   treated as application actions.
 - Application packages are local files only; manual submission is recorded only
   after an explicit user command.
+- Communication drafts are local files only; nothing is emailed, sent, or
+  posted automatically.
 - `.env`, `data/`, runtime databases, and generated private artifacts are not
   committed.
 - Tests use fixtures and temporary databases; ordinary automated tests do not
@@ -141,6 +147,7 @@ captured and reviewed for public sharing.
 - Application analytics page: `docs/images/application-analytics-placeholder.png`
 - Prep pack markdown preview: `docs/images/prep-pack-placeholder.png`
 - Manual application package: `docs/images/application-pack-placeholder.png`
+- Communication draft: `docs/images/communication-draft-placeholder.png`
 
 ## Setup
 
@@ -225,6 +232,15 @@ python -m app.cli applications submit-manual `
   --follow-up-date YYYY-MM-DD
 ```
 
+Draft a local follow-up message:
+
+```powershell
+python -m app.cli communications draft `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --type follow_up
+```
+
 Run the local daily wrapper:
 
 ```powershell
@@ -297,6 +313,7 @@ ordinary offline verification path.
 - [Application tracking](docs/APPLICATION_TRACKING.md)
 - [Prep packs](docs/PREP_PACKS.md)
 - [Manual applications](docs/MANUAL_APPLICATIONS.md)
+- [Communication drafts](docs/COMMUNICATION_DRAFTS.md)
 - [Legacy import](docs/LEGACY_IMPORT.md)
 
 ## Current Limitations

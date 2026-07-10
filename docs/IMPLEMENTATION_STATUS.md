@@ -270,6 +270,25 @@ External credential rotation remains a manual security gate. No credential value
   schema migration, scoring change, source-adapter change, CV/AI validation
   change, or `existing_projects/` modification was required.
 
+### Migration Milestone 21
+
+- Local communication draft service creates markdown drafts for follow-up,
+  recruiter reply, interview availability, interview thank-you, rejection
+  response, and status-update workflows.
+- CLI `communications draft --profile-id <id> --job-id <id> --type <type>`
+  writes ignored local files under `data/communication_drafts/` by default and
+  returns JSON with output path, warnings, and event-recording status.
+- Drafts use stored job, application, profile evidence, CV artifact, prep-pack,
+  application-pack, and application-history context with placeholders for
+  uncertain recruiter names, dates, interview details, and portal references.
+- Optional `--record-event` appends a local application note without changing
+  application status.
+- Job Detail shows exact communication-draft CLI commands and latest local draft
+  files passively.
+- No email, Telegram send, recruiter contact, auto-apply, live network request,
+  live AI call, schema migration, scoring change, source-adapter change,
+  CV/AI validation change, or `existing_projects/` modification was required.
+
 ## Legacy concepts reused
 
 - `ai_cv_tailor/data/master_cv.json`: candidate-profile shape, evidence-oriented profile direction, and deterministic/rule-based authority.
@@ -323,6 +342,10 @@ No legacy module is imported, and no file under `existing_projects/` is modified
   submit-manual tracking wrapper, dashboard read-only command/file visibility,
   ignored `data/application_packs/` output path, focused tests, and
   `docs/MANUAL_APPLICATIONS.md`.
+- Milestone 21: communication draft service, CLI command, optional explicit
+  note event, dashboard read-only command/file visibility, ignored
+  `data/communication_drafts/` output path, focused tests, and
+  `docs/COMMUNICATION_DRAFTS.md`.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 

@@ -270,6 +270,20 @@ python -m app.cli applications submit-manual `
 This records local CRM status and follow-up metadata only. It does not submit,
 email, upload, or notify anyone.
 
+## Draft Follow-Up Communication
+
+```powershell
+python -m app.cli communications draft `
+  --profile-id <profile-id> `
+  --job-id <job-id> `
+  --type follow_up
+```
+
+Drafts are local markdown files under `data/communication_drafts/`. They use
+stored application context and placeholders such as `[Recruiter Name]` or
+`[Application Date]`. Review and replace placeholders manually before sending
+anything outside the system.
+
 ## View History
 
 ```powershell

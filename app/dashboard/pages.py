@@ -520,6 +520,24 @@ def job_detail_page() -> None:
             st.markdown("**Latest local application packages**")
             st.dataframe(application_packs, use_container_width=True, hide_index=True)
 
+        st.subheader("Communication drafts")
+        draft_commands = context.queries.communication_draft_commands(
+            _profile_id(),
+            selected,
+        )
+        st.dataframe(draft_commands, use_container_width=True, hide_index=True)
+        st.caption(
+            "Communication drafts are local markdown only. The dashboard does "
+            "not send email, Telegram messages, or recruiter communications."
+        )
+        drafts = context.queries.latest_communication_drafts(
+            context.settings.data_dir / "communication_drafts",
+            job_id=selected,
+        )
+        if drafts:
+            st.markdown("**Latest local communication drafts**")
+            st.dataframe(drafts, use_container_width=True, hide_index=True)
+
 
 def duplicate_review_page() -> None:
     context = runtime()

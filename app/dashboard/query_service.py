@@ -17,6 +17,11 @@ from app.services.application_pack import (
     ApplicationPackService,
     latest_application_packs,
 )
+from app.services.communications import (
+    SUPPORTED_DRAFT_TYPES,
+    CommunicationDraftService,
+    latest_communication_drafts,
+)
 from app.services.cv_generation import CV_BUILDER_CONTENT_VERSION
 from app.services.deduplication import DEDUPLICATION_VERSION
 from app.services.prep_pack import PrepPackService, latest_prep_packs
@@ -666,6 +671,37 @@ class DashboardQueryService:
     ) -> tuple[dict[str, object], ...]:
         return latest_application_packs(
             application_pack_dir, job_id=job_id, limit=limit
+        )
+
+    def communication_draft_commands(
+        self,
+        profile_id: UUID | str,
+        job_id: UUID | str,
+    ) -> tuple[dict[str, str], ...]:
+        service = CommunicationDraftService(
+            self.database,
+            default_output_dir=Path("data/communication_drafts"),
+            prep_pack_dir=Path("data/prep_packs"),
+            application_pack_dir=Path("data/application_packs"),
+        )
+        return tuple({
+            "draft_type": draft_type,
+            "command": service.preview_command(
+                profile_id=profile_id,
+                job_id=job_id,
+                draft_type=draft_type,
+            ),
+        } for draft_type in SUPPORTED_DRAFT_TYPES)
+
+    def latest_communication_drafts(
+        self,
+        communication_draft_dir: Path | str,
+        *,
+        job_id: UUID | str | None = None,
+        limit: int = 10,
+    ) -> tuple[dict[str, object], ...]:
+        return latest_communication_drafts(
+            communication_draft_dir, job_id=job_id, limit=limit
         )
 
     @staticmethod

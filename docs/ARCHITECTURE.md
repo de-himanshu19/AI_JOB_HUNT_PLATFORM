@@ -25,6 +25,7 @@ flowchart LR
     Prep --> AppPack["Application packages"]
     CV --> Prep
     CV --> AppPack
+    Applications --> Comms["Communication drafts"]
     CV --> Validator["Validation layer"]
     Validator --> Artifacts["Artifact storage"]
     CV --> AI["Optional AI provider"]
@@ -65,6 +66,9 @@ Services contain business workflows and keep page/command code thin:
 - Application pack service creates local manual-submission folders with
   checklists, job snapshots, CV references, cover-letter drafts, submission
   notes, and follow-up plans.
+- Communication draft service creates local message drafts from stored
+  application, profile, job, CV, prep-pack, application-pack, and history
+  context without sending anything.
 - Legacy import service handles backup, dry-run, apply, verify, and reconcile.
 
 ## Repository And Database Layer
@@ -137,3 +141,8 @@ emailed, sent to Telegram, or used to mutate application state by default.
 Application packages are local generated folders under ignored runtime storage
 (`data/application_packs/`). They reference CV artifacts by default and copy CV
 text only when explicitly requested with `--include-cv-text`.
+
+Communication drafts are local markdown files under ignored runtime storage
+(`data/communication_drafts/`). They include placeholders for uncertain names,
+dates, interview details, and reference numbers and must be reviewed manually
+before use.

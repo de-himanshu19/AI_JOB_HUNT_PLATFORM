@@ -105,6 +105,16 @@ not a commitment to implement future items automatically.
   after the user applies manually.
 - Dashboard Job Detail shows exact package/submission commands passively.
 
+### M21: Follow-Up And Communication Drafts
+
+- Local markdown drafts for follow-ups, recruiter replies, interview
+  availability, thank-you notes, rejection responses, and status updates.
+- Drafts use stored application/job/profile context and placeholders for
+  uncertain names, dates, and reference numbers.
+- Optional `--record-event` appends a local note without changing status.
+- Dashboard Job Detail shows exact draft commands and latest local draft files
+  passively.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and
@@ -115,6 +125,7 @@ not a commitment to implement future items automatically.
 - Improve analytics calibration with reviewed outcomes and longer trend windows.
 - Add richer prep-pack templates after enough reviewed application feedback.
 - Add richer manual-submission analytics after more tracked outcomes.
+- Add richer communication templates after reviewing real reply patterns.
 - Prepare final anonymized deployment/demo packaging with reviewed screenshots
   and fixture data.
 

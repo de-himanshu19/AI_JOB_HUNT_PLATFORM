@@ -26,6 +26,10 @@ from app.services.analysis_rules import AnalysisRules
 from app.services.analytics import ApplicationAnalyticsService
 from app.services.application_pack import ApplicationPackService
 from app.services.applications import ApplicationService
+from app.services.communications import (
+    SUPPORTED_DRAFT_TYPES,
+    CommunicationDraftService,
+)
 from app.services.daily_run import DailyRunConfigError, DailyRunService, DailySearch
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
@@ -329,6 +333,24 @@ def build_parser() -> argparse.ArgumentParser:
     application_pack_create.add_argument("--output-dir", type=Path)
     application_pack_create.add_argument("--include-cv-text", action="store_true")
     application_pack_create.add_argument("--force", action="store_true")
+
+    communications = commands.add_parser(
+        "communications",
+        help="Generate local communication drafts without sending",
+    )
+    communication_commands = communications.add_subparsers(
+        dest="communications_command", required=True
+    )
+    communication_draft = communication_commands.add_parser("draft")
+    communication_draft.add_argument("--profile-id", required=True)
+    communication_draft.add_argument("--job-id", required=True)
+    communication_draft.add_argument(
+        "--type", required=True, choices=SUPPORTED_DRAFT_TYPES
+    )
+    communication_draft.add_argument("--output-dir", type=Path)
+    communication_draft.add_argument("--tone", choices=["professional"], default="professional")
+    communication_draft.add_argument("--force", action="store_true")
+    communication_draft.add_argument("--record-event", action="store_true")
 
     applications = commands.add_parser(
         "applications", help="Track job applications locally"
@@ -1247,6 +1269,32 @@ def _application_pack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _communications(args: argparse.Namespace) -> int:
+    if args.communications_command != "draft":
+        raise AssertionError("Unhandled communications command")
+    settings = get_settings()
+    configure_logging(settings)
+    database = Database.from_settings(settings)
+    migrate(database)
+    service = CommunicationDraftService(
+        database,
+        default_output_dir=settings.data_dir / "communication_drafts",
+        prep_pack_dir=settings.data_dir / "prep_packs",
+        application_pack_dir=settings.data_dir / "application_packs",
+    )
+    result = service.create_draft(
+        profile_id=args.profile_id,
+        job_id=args.job_id,
+        draft_type=args.type,
+        output_dir=args.output_dir,
+        tone=args.tone,
+        force=args.force,
+        record_event=args.record_event,
+    )
+    print(json.dumps(result.as_json(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def _legacy_plan_json(plan: LegacyImportPlan) -> dict[str, object]:
     return {
         "source_type": plan.source_type.value,
@@ -1462,6 +1510,8 @@ def main(argv: list[str] | None = None) -> int:
         return _prep(args)
     if args.command == "application-pack":
         return _application_pack(args)
+    if args.command == "communications":
+        return _communications(args)
     if args.command == "applications":
         return _applications(args)
     raise AssertionError("Unhandled command")
