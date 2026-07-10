@@ -1,9 +1,10 @@
 # AI Job Hunt Platform
 
-A local-first job search automation platform that collects roles, deduplicates
-vacancies, scores job fit, supports application tracking, and generates
-truthful FlowCV-ready CV text without auto-applying or making hidden network
-calls.
+AI Job Hunt Platform is a local-first Python portfolio project that turns job
+searching into an auditable workflow: collect roles, deduplicate vacancies,
+score job fit, track applications, generate truthful FlowCV-ready CV text, and
+prepare local application materials without auto-applying or making hidden
+network calls.
 
 ## Problem
 
@@ -21,6 +22,16 @@ versioned candidate profile, ranks logical vacancies, previews notifications,
 tracks application state, and creates FlowCV text artifacts. Optional AI polish
 can improve wording, but only when explicitly enabled and only when protected
 facts still validate.
+
+## Current Release Status
+
+- Release: `v0.1.0-local-portfolio`
+- Scope: local single-user portfolio/demo application
+- Database: SQLite with ordered migrations
+- UI: optional local Streamlit dashboard
+- Verification baseline: `315 passed, 2 skipped`
+- Production claim: not a hosted production SaaS; designed for safe local use
+  and technical portfolio review
 
 ## Why It Matters
 
@@ -289,7 +300,7 @@ More demo commands are in [docs/DEMO.md](docs/DEMO.md).
 
 Latest verified baseline:
 
-- `python -m pytest` -> `272 passed, 2 skipped`
+- `python -m pytest` -> `315 passed, 2 skipped`
 - `python -m compileall app tests` -> passed
 - `git diff --check` -> passed
 - `git diff -- existing_projects` -> unchanged
@@ -298,9 +309,25 @@ The skipped tests are optional live smoke tests for Arbeitsagentur and
 EnglishJobs. They require explicit environment opt-in and are not part of the
 ordinary offline verification path.
 
+## Portfolio Talking Points
+
+- Designed a local-first architecture for private job-search data.
+- Built typed domain models, migrations, repositories, services, CLI commands,
+  and dashboard pages.
+- Used deterministic ranking and protected-fact validation instead of opaque AI
+  automation.
+- Kept high-risk actions explicit: no auto-apply, no hidden AI, no hidden
+  sending, no dashboard-triggered live collection.
+- Covered the workflow with a fixture-first pytest suite and optional live
+  smoke tests.
+
 ## Documentation
 
 - [Demo guide](docs/DEMO.md)
+- [Release notes](docs/RELEASE_NOTES.md)
+- [Portfolio summary](docs/PORTFOLIO_SUMMARY.md)
+- [Interview guide](docs/INTERVIEW_GUIDE.md)
+- [Project health check](docs/PROJECT_HEALTH_CHECK.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Safety model](docs/SAFETY.md)
 - [Job sources](docs/SOURCES.md)

@@ -15,6 +15,98 @@ database-specific.
 No Telegram, Ollama, OpenAI-compatible, MySQL, Arbeitsagentur, or EnglishJobs
 credentials are required for the offline demo.
 
+## Clean End-To-End Demo Flow
+
+Use placeholders for public demos and local IDs for private smoke tests.
+
+1. Activate environment:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+2. Run tests:
+
+```powershell
+python -m pytest
+```
+
+3. Run daily pipeline safely:
+
+```powershell
+python -m app.cli daily run `
+  --profile-id <profile-id> `
+  --query "Data Analyst" `
+  --location Deutschland `
+  --source arbeitsagentur `
+  --max-pages 1 `
+  --page-size 10 `
+  --top-n 10 `
+  --preview-notification
+```
+
+4. Open dashboard:
+
+```powershell
+python -m app.dashboard
+```
+
+5. Shortlist a job:
+
+```powershell
+python -m app.cli applications shortlist --profile-id <profile-id> --job-id <job-id> --priority high --note "Strong fit after review"
+```
+
+6. Generate CV:
+
+```powershell
+python -m app.cli cv generate --job-id <job-id> --profile-id <profile-id>
+```
+
+7. Optional safe AI polish:
+
+```powershell
+python -m app.cli cv polish --artifact-id <rule-based-artifact-id> --live-ai
+```
+
+8. Create prep pack:
+
+```powershell
+python -m app.cli prep pack --profile-id <profile-id> --job-id <job-id> --cv-artifact-id <artifact-id>
+```
+
+9. Create application pack:
+
+```powershell
+python -m app.cli application-pack create --profile-id <profile-id> --job-id <job-id> --cv-artifact-id <artifact-id>
+```
+
+10. Create communication draft:
+
+```powershell
+python -m app.cli communications draft --profile-id <profile-id> --job-id <job-id> --type follow_up
+```
+
+11. View analytics:
+
+```powershell
+python -m app.cli analytics summary --profile-id <profile-id>
+```
+
+## Local Smoke Example
+
+Private local example IDs used during development:
+
+```powershell
+python -m app.cli application-pack create `
+  --profile-id 543ca73e-7c5d-44af-96f8-d3b43b463284 `
+  --job-id ac8bfd95-44bb-4442-abca-46ab7fb8111d `
+  --cv-artifact-id 6b893ea6-c52e-4007-87e5-bc89fb2849e9
+```
+
+Keep local outputs under ignored `data/` paths and do not commit private
+artifacts.
+
 ## Activate Environment
 
 ```powershell
@@ -49,7 +141,7 @@ python -m compileall app tests
 Expected offline baseline from the latest verification:
 
 ```text
-272 passed, 2 skipped
+315 passed, 2 skipped
 ```
 
 The skipped tests are optional live smoke tests for Arbeitsagentur and
@@ -294,7 +386,7 @@ python -m app.cli applications history `
 
 Every accepted application tracking change writes an immutable event.
 
-## Local Smoke Example
+## CV-Only Smoke Example
 
 Use the real IDs from your local database when running a private smoke test:
 

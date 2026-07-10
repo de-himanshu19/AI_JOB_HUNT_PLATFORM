@@ -23,6 +23,7 @@ htmlcov/
 venv/
 
 # Local runtime data and generated artifacts
+data/
 data/*.sqlite3
 data/*.sqlite3-*
 data/artifacts/
