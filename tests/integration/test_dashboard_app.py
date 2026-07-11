@@ -14,6 +14,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 from app.config import _reset_settings_cache_for_tests, settings_from_mapping
+from app.dashboard.dashboard_app import navigation_labels
 from app.dashboard.pages import (
     analytics_page,
     applications_page,
@@ -78,9 +79,31 @@ def _run(monkeypatch, tmp_path):
 def test_empty_database_starts_without_credentials_or_exceptions(monkeypatch, tmp_path) -> None:
     app = _run(monkeypatch, tmp_path)
     assert not app.exception
-    assert app.title[0].value == "Overview"
+    assert app.title[0].value == "Daily Runs"
     assert any("No collection runs" in item.value for item in app.info)
     assert (tmp_path / "dashboard.sqlite3").exists()
+
+
+def test_dashboard_navigation_exposes_milestone_23_workflow() -> None:
+    labels = navigation_labels()
+
+    assert labels["Daily Workflow"] == (
+        "Daily Runs",
+        "Review Jobs",
+        "Review Tray",
+        "Job Detail",
+        "CV Workflow",
+        "Applications",
+        "Analytics",
+    )
+    assert labels["Advanced / Diagnostics"] == (
+        "Duplicate Review",
+        "Notifications",
+        "Advanced / Diagnostics",
+    )
+    assert "Jobs" not in labels["Daily Workflow"]
+    assert "Applications Analytics" not in labels["Daily Workflow"]
+    assert "Runs & Diagnostics" not in labels["Advanced / Diagnostics"]
 
 
 def test_absolute_home_path_starts_streamlit_without_import_shadowing(tmp_path) -> None:

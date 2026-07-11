@@ -19,6 +19,25 @@ from app.dashboard.runtime import runtime
 from app.dashboard.styles import apply_styles
 
 
+def navigation_labels() -> dict[str, tuple[str, ...]]:
+    return {
+        "Daily Workflow": (
+            "Daily Runs",
+            "Review Jobs",
+            "Review Tray",
+            "Job Detail",
+            "CV Workflow",
+            "Applications",
+            "Analytics",
+        ),
+        "Advanced / Diagnostics": (
+            "Duplicate Review",
+            "Notifications",
+            "Advanced / Diagnostics",
+        ),
+    }
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Job Hunt Operations Desk",
@@ -29,24 +48,62 @@ def main() -> None:
     apply_styles()
     context = runtime()
     profile_picker(context)
+    labels = navigation_labels()
     pages = {
         "Daily Workflow": [
-            st.Page(overview_page, title="Daily Runs", url_path="overview", default=True),
-            st.Page(jobs_page, title="Review Jobs", url_path="jobs"),
-            st.Page(review_tray_page, title="Review Tray", url_path="review-tray"),
-            st.Page(job_detail_page, title="Job Detail", url_path="job-detail"),
-            st.Page(cv_builder_page, title="CV Workflow", url_path="cv-builder"),
-            st.Page(applications_page, title="Applications", url_path="applications"),
+            st.Page(
+                overview_page,
+                title=labels["Daily Workflow"][0],
+                url_path="daily-runs",
+                default=True,
+            ),
+            st.Page(
+                jobs_page,
+                title=labels["Daily Workflow"][1],
+                url_path="review-jobs",
+            ),
+            st.Page(
+                review_tray_page,
+                title=labels["Daily Workflow"][2],
+                url_path="review-tray",
+            ),
+            st.Page(
+                job_detail_page,
+                title=labels["Daily Workflow"][3],
+                url_path="job-detail",
+            ),
+            st.Page(
+                cv_builder_page,
+                title=labels["Daily Workflow"][4],
+                url_path="cv-builder",
+            ),
+            st.Page(
+                applications_page,
+                title=labels["Daily Workflow"][5],
+                url_path="applications",
+            ),
             st.Page(
                 analytics_page,
-                title="Analytics",
-                url_path="applications-analytics",
+                title=labels["Daily Workflow"][6],
+                url_path="analytics",
             ),
         ],
         "Advanced / Diagnostics": [
-            st.Page(duplicate_review_page, title="Duplicate Review", url_path="duplicates"),
-            st.Page(notifications_page, title="Notifications", url_path="notifications"),
-            st.Page(runs_page, title="Advanced / Diagnostics", url_path="runs"),
+            st.Page(
+                duplicate_review_page,
+                title=labels["Advanced / Diagnostics"][0],
+                url_path="duplicates",
+            ),
+            st.Page(
+                notifications_page,
+                title=labels["Advanced / Diagnostics"][1],
+                url_path="notifications",
+            ),
+            st.Page(
+                runs_page,
+                title=labels["Advanced / Diagnostics"][2],
+                url_path="advanced-diagnostics",
+            ),
         ],
     }
     st.navigation(pages, position="sidebar").run()

@@ -63,8 +63,8 @@ def overview_page() -> None:
     context = runtime()
     profile_id = _profile_id()
     page_header(
-        "Overview",
-        "A quiet control room for the job hunt: what arrived, what deserves review, and what is ready for action.",
+        "Daily Runs",
+        "A quiet control room for daily searches: what arrived, what deserves review, and what is ready for action.",
     )
     view = cached_overview(
         str(context.database.path), context.database.busy_timeout_ms, profile_id or ""
@@ -118,7 +118,7 @@ def analytics_page() -> None:
     context = runtime()
     profile_id = _profile_id()
     page_header(
-        "Applications Analytics",
+        "Analytics",
         "Read-only funnel, source quality, follow-up, and daily activity signals for the job search.",
         eyebrow="Progress dashboard",
     )
@@ -1535,7 +1535,7 @@ def notifications_page() -> None:
 def runs_page() -> None:
     context = runtime()
     page_header(
-        "Runs & Diagnostics",
+        "Advanced / Diagnostics",
         "Operational facts without raw payloads, document text, provider responses, or credentials.",
         eyebrow="Safe diagnostics",
     )
