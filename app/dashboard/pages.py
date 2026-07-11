@@ -46,6 +46,102 @@ def _set_selected_job(job_id: str) -> None:
     st.session_state["selected_job_id"] = job_id
 
 
+def _remember_cv_result(context, result) -> dict[str, object]:
+    rule = context.actions.read_cv_artifact(result.rule_based_artifact.id)
+    payload: dict[str, object] = {
+        "rule_artifact": result.rule_based_artifact,
+        "rule_text": rule["text"],
+        "evidence_text": rule["evidence_text"],
+        "ai_status": result.ai_status,
+        "ai_failure_category": result.ai_failure_category,
+        "ai_validation_result": result.ai_validation_result,
+    }
+    if result.ai_artifact:
+        ai = context.actions.read_cv_artifact(result.ai_artifact.id)
+        payload["ai_artifact"] = result.ai_artifact
+        payload["ai_text"] = ai["text"]
+    st.session_state["cv_workspace"] = payload
+    st.session_state["last_cv_result"] = _cv_result(result)
+    return payload
+
+
+def _render_cv_output() -> None:
+    payload = st.session_state.get("cv_workspace")
+    if not payload:
+        return
+    rule_artifact = payload["rule_artifact"]
+    tabs = st.tabs(["Rule-Based CV", "AI-Polished CV"])
+    with tabs[0]:
+        st.text_area(
+            "Rule-Based CV text",
+            payload["rule_text"],
+            height=520,
+            key=f"workspace-rule-{rule_artifact.id}",
+        )
+        if st.button("Copy CV Text", key=f"copy-rule-{rule_artifact.id}"):
+            st.info("The CV text is ready above. Use Ctrl+A, then Ctrl+C to copy it into FlowCV.")
+    with tabs[1]:
+        if payload.get("ai_text"):
+            ai_artifact = payload["ai_artifact"]
+            st.text_area(
+                "AI-Polished CV text",
+                payload["ai_text"],
+                height=520,
+                key=f"workspace-ai-{ai_artifact.id}",
+            )
+            if st.button("Copy AI-Polished CV", key=f"copy-ai-{ai_artifact.id}"):
+                st.info("The validated AI text is ready above. Use Ctrl+A, then Ctrl+C.")
+        elif payload.get("ai_status") == "failed":
+            st.error(
+                "AI polish did not pass safely. The rule-based CV remains available and unchanged."
+            )
+            if payload.get("ai_failure_category"):
+                st.caption(f"Failure category: {payload['ai_failure_category']}")
+        else:
+            st.info("No validated AI-polished CV exists for this workspace yet.")
+    with st.expander("Evidence report"):
+        st.text_area(
+            "Private evidence report",
+            payload["evidence_text"],
+            height=300,
+            disabled=True,
+            key=f"workspace-evidence-{rule_artifact.id}",
+        )
+    with st.expander("Artifact metadata"):
+        st.json({
+            "artifact_id": str(rule_artifact.id),
+            "source": rule_artifact.source.value,
+            "validated": rule_artifact.validated,
+            "created_at": rule_artifact.created_at.isoformat(),
+            "ai_status": payload.get("ai_status"),
+        })
+
+
+def _render_cover_letter_output() -> None:
+    result = st.session_state.get("cover_letter_workspace")
+    if not result:
+        return
+    st.text_area(
+        "Cover letter draft",
+        result.text,
+        height=460,
+        key=f"cover-letter-text-{result.artifact_id}",
+    )
+    if st.button("Copy Cover Letter", key=f"copy-cover-{result.artifact_id}"):
+        st.info("The draft is ready above. Use Ctrl+A, then Ctrl+C to copy it.")
+    st.warning("Review before sending. Nothing is sent automatically.")
+    with st.expander("Cover-letter artifact details"):
+        st.json({
+            "artifact_id": result.artifact_id,
+            "source": result.source,
+            "validated": result.validated,
+            "created_at": result.created_at,
+            "template": result.template_name,
+            "parent_artifact_id": result.parent_artifact_id,
+            "warnings": list(result.warnings),
+        })
+
+
 def _selected_cv_artifact_id(detail) -> str | None:
     if detail.applications and detail.applications[0].get("cv_artifact_id"):
         return str(detail.applications[0]["cv_artifact_id"])
@@ -442,27 +538,27 @@ def review_tray_page() -> None:
     )
     selected_job = str(selected_application["job_id"])
     _set_selected_job(selected_job)
-    st.caption("Selected job is shared with Job Detail, CV Workflow, and command sections.")
-    commands = {
-        "Generate CV": (
-            f"python -m app.cli cv generate --job-id {selected_job} "
-            f"--profile-id {profile_id}"
-        ),
-        "Create Prep Pack": context.queries.prep_pack_command(profile_id, selected_job),
-        "Create Application Pack": context.queries.application_pack_command(
-            profile_id,
-            selected_job,
-            selected_application.get("cv_artifact_id")
-            or selected_application.get("latest_cv_artifact_id"),
-        ),
-    }
-    command_tab, action_tab = st.tabs(["Commands", "Application Actions"])
-    with command_tab:
-        for label, command in commands.items():
-            st.markdown(f"**{label}**")
-            st.code(command, language="powershell")
-        st.caption("Commands are local-only. The dashboard does not apply, send, or call AI automatically.")
-    with action_tab:
+    st.caption("Selected job is shared with Job Detail and CV Workflow.")
+    create_columns = st.columns(3)
+    if create_columns[0].button("Open Job Detail", type="primary"):
+        st.success("Selected. Open Job Detail from the navigation to use the full workspace.")
+    if create_columns[1].button("Generate CV"):
+        try:
+            with st.spinner("Generating the local rule-based CV..."):
+                result = context.actions.generate_cv(selected_job, profile_id)
+            _remember_cv_result(context, result)
+            st.success("CV generated. Open Job Detail to review and copy it.")
+        except Exception as error:
+            safe_error(error)
+    if create_columns[2].button("Generate Cover Letter"):
+        try:
+            with st.spinner("Generating a local cover-letter draft..."):
+                result = context.actions.generate_cover_letter(selected_job, profile_id)
+            st.session_state["cover_letter_workspace"] = result
+            st.success("Cover letter generated. Open Job Detail to review it.")
+        except Exception as error:
+            safe_error(error)
+    with st.expander("Application actions"):
         note = st.text_input("Action note", key="review-tray-action-note")
         follow_up = st.date_input(
             "Follow-up date",
@@ -470,11 +566,8 @@ def review_tray_page() -> None:
             key="review-tray-follow-up",
         )
         confirmed = st.checkbox("Confirm selected Review Tray action")
-        columns = st.columns(4)
-        if columns[0].button("Open Job Detail", type="primary"):
-            _set_selected_job(selected_job)
-            st.success("Selected. Open Job Detail from the navigation.")
-        if columns[1].button("Remove from Tray / Skip"):
+        columns = st.columns(3)
+        if columns[0].button("Remove from Tray / Skip"):
             if not confirmed:
                 st.warning("Confirm before removing this job from the Review Tray.")
             else:
@@ -492,7 +585,7 @@ def review_tray_page() -> None:
                         st.success("Job removed from the Review Tray.")
                 except Exception as error:
                     safe_error(error)
-        if columns[2].button("Mark Applied"):
+        if columns[1].button("Mark Applied"):
             if not confirmed:
                 st.warning("Confirm after you have manually applied on the external website.")
             else:
@@ -510,7 +603,7 @@ def review_tray_page() -> None:
                         st.success("Application marked applied and follow-up saved.")
                 except Exception as error:
                     safe_error(error)
-        if columns[3].button("Set Follow-up"):
+        if columns[2].button("Set Follow-up"):
             if not confirmed:
                 st.warning("Confirm before changing the follow-up date.")
             else:
@@ -579,10 +672,11 @@ def _render_job_detail_action_center(context) -> None:
     link = job.get("canonical_url") or job.get("source_url")
     if link:
         st.link_button("Open original vacancy", str(link))
-    compatibility, description_tab, cv_tab, application_tab, advanced = st.tabs([
+    compatibility, description_tab, cv_tab, cover_tab, application_tab, advanced = st.tabs([
         "Compatibility / Why this job",
         "Job Description",
         "CV Actions",
+        "Cover Letter",
         "Application Actions",
         "Advanced Details",
     ])
@@ -626,48 +720,172 @@ def _render_job_detail_action_center(context) -> None:
     with cv_tab:
         profile_id = _profile_id()
         if not profile_id:
-            st.info("Select a candidate profile to generate CV commands.")
+            st.info("Select a candidate profile before generating a CV.")
         else:
-            st.markdown("**Generate CV**")
-            st.code(
-                f"python -m app.cli cv generate --job-id {selected} --profile-id {profile_id}",
-                language="powershell",
+            completeness = (
+                detail.description.get("completeness") if detail.description else "missing"
             )
-            st.markdown("**Optional AI polish, explicit live AI only**")
-            st.code(
-                "python -m app.cli cv generate "
-                f"--job-id {selected} --profile-id {profile_id} "
-                "--force-regenerate --ai-polish --live-ai",
-                language="powershell",
+            if completeness == "full":
+                actions = st.columns(2)
+                generate_clicked = actions[0].button(
+                    "Generate Rule-Based CV", type="primary"
+                )
+                show_clicked = actions[1].button("Show Latest CV")
+                if generate_clicked:
+                    try:
+                        with st.spinner("Generating and validating the local CV..."):
+                            result = context.actions.generate_cv(selected, profile_id)
+                        _remember_cv_result(context, result)
+                        st.success("Rule-based CV generated locally and validated.")
+                    except Exception as error:
+                        safe_error(error)
+                if show_clicked:
+                    try:
+                        artifacts = context.queries.list_cv_artifacts(profile_id, selected)
+                        if not artifacts:
+                            st.info("No CV artifact exists for this job yet.")
+                        else:
+                            artifact_id = artifacts[0]["artifact_id"]
+                            artifact_payload = context.actions.read_cv_artifact(artifact_id)
+                            st.session_state["cv_workspace"] = {
+                                "rule_artifact": artifact_payload["artifact"],
+                                "rule_text": artifact_payload["text"],
+                                "evidence_text": artifact_payload["evidence_text"],
+                                "ai_status": "not_requested",
+                            }
+                    except Exception as error:
+                        safe_error(error)
+            else:
+                st.warning("A full job description is required for a properly tailored CV.")
+                if link:
+                    st.link_button("Open Original Vacancy", str(link))
+                pasted_description = st.text_area(
+                    "Paste Full Job Description",
+                    height=260,
+                    key=f"manual-description-{selected}",
+                )
+                if st.button("Generate CV from Pasted Description", type="primary"):
+                    try:
+                        with st.spinner("Generating and validating the local CV..."):
+                            result = context.actions.generate_manual_cv(
+                                pasted_description, profile_id
+                            )
+                        _remember_cv_result(context, result)
+                        st.success("CV generated from the pasted description. The stored job description was not changed.")
+                    except Exception as error:
+                        safe_error(error)
+            workspace = st.session_state.get("cv_workspace")
+            rule_artifact = workspace.get("rule_artifact") if workspace else None
+            if rule_artifact:
+                ai_confirmed = st.checkbox(
+                    "I understand AI Polish CV sends the rule-based CV to the configured live AI provider",
+                    key=f"confirm-ai-cv-{selected}",
+                )
+                polish_columns = st.columns(2)
+                if polish_columns[0].button("AI Polish CV"):
+                    if not ai_confirmed:
+                        st.warning("Confirm the live AI request first.")
+                    else:
+                        try:
+                            with st.spinner("Requesting conservative AI polish and validating facts..."):
+                                result = context.actions.polish_cv_artifact(
+                                    rule_artifact.id, live_ai_confirmed=True
+                                )
+                            _remember_cv_result(context, result)
+                            if result.ai_artifact:
+                                st.success("AI-polished CV passed validation.")
+                            else:
+                                st.error("AI polish failed validation. The rule-based CV remains unchanged.")
+                        except Exception as error:
+                            safe_error(error)
+                if polish_columns[1].button("Attach CV to Application"):
+                    try:
+                        result = context.actions.attach_cv_artifact(
+                            selected,
+                            profile_id,
+                            rule_artifact.id,
+                            note="CV attached explicitly from Job Detail",
+                        )
+                        if result:
+                            st.success("CV attached and application marked CV-ready.")
+                    except Exception as error:
+                        safe_error(error)
+                st.markdown(f"**{title} | {company}**")
+                _render_cv_output()
+    with cover_tab:
+        profile_id = _profile_id()
+        if not profile_id:
+            st.info("Select a candidate profile before generating a cover letter.")
+        else:
+            templates = context.actions.cover_letter_templates()
+            template_name = st.selectbox(
+                "Cover Letter Style / Template", templates, key=f"cover-template-{selected}"
             )
-            if st.button("Generate local rule-based CV"):
+            completeness = (
+                detail.description.get("completeness") if detail.description else "missing"
+            )
+            manual_cover_description = None
+            if completeness != "full":
+                st.warning("The stored job description is incomplete. Paste the full description for stronger tailoring.")
+                manual_cover_description = st.text_area(
+                    "Paste Full Job Description for Cover Letter",
+                    height=220,
+                    key=f"cover-description-{selected}",
+                )
+            cover_actions = st.columns(2)
+            if cover_actions[0].button("Generate Cover Letter", type="primary"):
                 try:
-                    result = execute_once(
-                        f"job-detail-cv:{selected}:{profile_id}",
-                        lambda: context.actions.generate_cv(selected, profile_id),
-                    )
-                    if result:
-                        st.session_state["last_cv_result"] = _cv_result(result)
-                        st.success("Rule-based CV generated locally.")
+                    with st.spinner("Generating and validating a local cover-letter draft..."):
+                        result = context.actions.generate_cover_letter(
+                            selected,
+                            profile_id,
+                            template_name=template_name,
+                            manual_description=manual_cover_description,
+                        )
+                    st.session_state["cover_letter_workspace"] = result
+                    st.success("Cover letter generated locally.")
                 except Exception as error:
                     safe_error(error)
-        if detail.cv_artifacts:
-            st.markdown("**Latest CV artifacts**")
-            st.dataframe(detail.cv_artifacts, use_container_width=True, hide_index=True)
-        else:
-            st.info("No CV artifacts are linked to this vacancy.")
+            if cover_actions[1].button("Show Latest Cover Letter"):
+                try:
+                    result = context.actions.latest_cover_letter(profile_id, selected)
+                    if result:
+                        st.session_state["cover_letter_workspace"] = result
+                    else:
+                        st.info("No cover-letter draft exists for this job yet.")
+                except Exception as error:
+                    safe_error(error)
+            cover_result = st.session_state.get("cover_letter_workspace")
+            if cover_result and cover_result.job_id == str(selected):
+                ai_cover_confirmed = st.checkbox(
+                    "I understand AI Polish Cover Letter sends this draft to the configured live AI provider",
+                    key=f"confirm-ai-cover-{selected}",
+                )
+                if st.button("AI Polish Cover Letter"):
+                    if not ai_cover_confirmed:
+                        st.warning("Confirm the live AI request first.")
+                    else:
+                        try:
+                            with st.spinner("Requesting conservative AI polish and validating facts..."):
+                                polished = context.actions.polish_cover_letter(
+                                    cover_result.artifact_id, live_ai_confirmed=True
+                                )
+                            if polished.validated and polished.source == "ai_polished":
+                                st.session_state["cover_letter_workspace"] = polished
+                                st.success("AI-polished cover letter passed validation.")
+                            else:
+                                st.error("AI output failed validation. The rule-based draft remains unchanged.")
+                        except Exception as error:
+                            safe_error(error)
+                st.markdown(f"**{title} | {company}**")
+                _render_cover_letter_output()
     with application_tab:
         profile_id = _profile_id()
         if not profile_id:
             st.info("Select a candidate profile before application actions.")
         else:
             selected_cv = _selected_cv_artifact_id(detail)
-            st.markdown("**Local preparation commands**")
-            st.code(context.queries.prep_pack_command(profile_id, selected, selected_cv), language="powershell")
-            st.code(context.queries.application_pack_command(profile_id, selected, selected_cv), language="powershell")
-            for row in context.queries.communication_draft_commands(profile_id, selected):
-                st.code(row["command"], language="powershell")
-            st.caption("These commands create local files only. They do not apply, upload, send, or call AI.")
+            st.caption("Preparation actions create local files only. Nothing is uploaded or sent.")
             note = st.text_input("Application action note", key="job-detail-action-note")
             follow_up = st.date_input(
                 "Follow-up date",
@@ -944,15 +1162,8 @@ def job_detail_page() -> None:
             selected_cv = detail.applications[0].get("cv_artifact_id")
         if not selected_cv and detail.cv_artifacts:
             selected_cv = detail.cv_artifacts[0].get("id")
-        command = context.queries.prep_pack_command(
-            _profile_id(),
-            selected,
-            selected_cv,
-        )
-        st.code(command, language="powershell")
         st.caption(
-            "Prep packs are local markdown drafts only. The dashboard does not "
-            "auto-apply, send messages, or call AI when showing this command."
+            "Prep packs are local markdown drafts only. Nothing is sent or applied."
         )
         packs = context.queries.latest_prep_packs(
             context.settings.data_dir / "prep_packs",
@@ -963,21 +1174,9 @@ def job_detail_page() -> None:
             st.dataframe(packs, use_container_width=True, hide_index=True)
 
         st.subheader("Manual application package")
-        package_command = context.queries.application_pack_command(
-            _profile_id(),
-            selected,
-            selected_cv,
-        )
-        st.code(package_command, language="powershell")
-        submit_command = context.queries.manual_submit_command(
-            _profile_id(),
-            selected,
-        )
-        st.code(submit_command, language="powershell")
         st.caption(
-            "Application packages are local files only. Marking an application "
-            "as submitted requires running the explicit submit-manual command "
-            "after you apply yourself."
+            "Application packages are local files only. Mark Applied remains an "
+            "explicit action after you submit externally."
         )
         application_packs = context.queries.latest_application_packs(
             context.settings.data_dir / "application_packs",
@@ -988,11 +1187,6 @@ def job_detail_page() -> None:
             st.dataframe(application_packs, use_container_width=True, hide_index=True)
 
         st.subheader("Communication drafts")
-        draft_commands = context.queries.communication_draft_commands(
-            _profile_id(),
-            selected,
-        )
-        st.dataframe(draft_commands, use_container_width=True, hide_index=True)
         st.caption(
             "Communication drafts are local markdown only. The dashboard does "
             "not send email, Telegram messages, or recruiter communications."
@@ -1218,9 +1412,9 @@ def applications_page() -> None:
 def cv_builder_page() -> None:
     context = runtime()
     page_header(
-        "CV Workflow",
-        "Generate, review, copy, and attach deterministic FlowCV artifacts without automatic submission.",
-        eyebrow="Application preparation",
+        "My CV Artifacts",
+        "Review, copy, and attach CV history. Create new job-specific drafts from Job Detail.",
+        eyebrow="Artifact library",
     )
     profile_id = _profile_id()
     if not profile_id:
@@ -1303,18 +1497,6 @@ def cv_builder_page() -> None:
     if result:
         st.subheader("Latest generation result")
         st.json(result)
-        if result.get("job_id"):
-            st.markdown("**Suggested next steps**")
-            st.code(
-                f"python -m app.cli prep pack --job-id {result['job_id']} "
-                f"--profile-id {result['profile_id']} --cv-artifact-id {result['artifact_id']}",
-                language="powershell",
-            )
-            st.code(
-                f"python -m app.cli application-pack create --job-id {result['job_id']} "
-                f"--profile-id {result['profile_id']} --cv-artifact-id {result['artifact_id']}",
-                language="powershell",
-            )
         st.markdown(
             '<div class="status-note"><strong>Private evidence report:</strong> '
             "Use it for verification only; it is not recruiter-facing content.</div>",

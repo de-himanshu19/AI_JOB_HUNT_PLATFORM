@@ -114,6 +114,8 @@ flowchart TD
 - Read-only application analytics for funnel progress, source quality,
   follow-ups, daily-run activity, and recent job-search movement.
 - Rule-based FlowCV text generation with private evidence reports.
+- Dashboard-native CV and cover-letter workspaces with copy-friendly text,
+  explicit attachment, optional validated AI polish, and no automatic sending.
 - Evidence-backed application/interview prep packs as local markdown drafts.
 - Manual application packages with checklists, notes, CV references, and
   follow-up plan.
@@ -222,7 +224,7 @@ python -m app.dashboard
 Dashboard daily review flow:
 
 ```text
-Daily Runs -> Review Jobs -> Review Tray -> Job Detail -> CV Workflow -> Applications -> Analytics
+Daily Runs -> Review Jobs -> Review Tray -> Job Detail -> CV/Cover Letter -> Apply manually -> Applications
 ```
 
 The Review Jobs filters apply only after clicking `Apply Filters`. Adding jobs
@@ -355,6 +357,7 @@ ordinary offline verification path.
 - [Prep packs](docs/PREP_PACKS.md)
 - [Manual applications](docs/MANUAL_APPLICATIONS.md)
 - [Communication drafts](docs/COMMUNICATION_DRAFTS.md)
+- [Cover letters](docs/COVER_LETTERS.md)
 - [Legacy import](docs/LEGACY_IMPORT.md)
 
 ## Current Limitations
@@ -363,7 +366,8 @@ ordinary offline verification path.
 - Scheduler support is local-only through CLI/PowerShell/Windows Task Scheduler.
 - EnglishJobs full-description extraction remains conservative, so many records
   may stay snippet-only.
-- FlowCV output is plain text; DOCX/PDF generation is outside the app.
+- CV and cover-letter output is copy-friendly plain text; DOCX/PDF generation
+  and external submission remain outside the app.
 - Telegram live sending is implemented but intentionally disabled by default.
 - Real MySQL import is optional and not required for ordinary use or tests.
 - Dashboard is local and single-user; it is not a hosted multi-user web app.

@@ -158,6 +158,58 @@ def test_attach_cv_action_delegates_to_application_service(tmp_path) -> None:
         assert stored.status is ApplicationStatus.CV_READY
 
 
+def test_dashboard_cv_generation_returns_copy_ready_text_without_network(
+    tmp_path, monkeypatch
+) -> None:
+    def fail_network(*args, **kwargs):
+        raise AssertionError("rule-based dashboard CV generation must remain offline")
+
+    import requests
+
+    monkeypatch.setattr(requests.Session, "request", fail_network)
+    settings, database, profile, job = _context(tmp_path)
+    text = (ROOT / "tests/fixtures/fit_analysis/full_data_analyst.txt").read_text(
+        encoding="utf-8"
+    )
+    with database.transaction() as connection:
+        JobDescriptionRepository(connection).create(JobDescription(
+            job_id=job.id, raw_text=text, normalized_text=text,
+            completeness=DescriptionCompleteness.FULL, content_hash="f" * 64,
+        ))
+    actions = DashboardActions(database, settings)
+
+    result = actions.generate_cv(job.id, profile.id)
+    payload = actions.read_cv_artifact(result.rule_based_artifact.id)
+
+    assert "PROFESSIONAL SUMMARY" in payload["text"]
+    assert "PRIVATE" in payload["evidence_text"]
+    assert result.ai_status == "not_requested"
+
+
+def test_dashboard_cover_letter_actions_create_local_draft_without_status_change(
+    tmp_path,
+) -> None:
+    settings, database, profile, job = _context(tmp_path)
+    text = (ROOT / "tests/fixtures/fit_analysis/full_data_analyst.txt").read_text(
+        encoding="utf-8"
+    )
+    with database.transaction() as connection:
+        JobDescriptionRepository(connection).create(JobDescription(
+            job_id=job.id, raw_text=text, normalized_text=text,
+            completeness=DescriptionCompleteness.FULL, content_hash="a" * 64,
+        ))
+    actions = DashboardActions(database, settings)
+
+    result = actions.generate_cover_letter(job.id, profile.id)
+
+    assert result.validated
+    assert "Dear Hiring Team" in result.text
+    assert Path(result.output_path).is_file()
+    assert actions.latest_cover_letter(profile.id, job.id).artifact_id == result.artifact_id
+    with database.read_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0] == 0
+
+
 def test_review_tray_action_shortlists_with_safe_dashboard_metadata(tmp_path) -> None:
     settings, database, profile, job = _context(tmp_path)
     actions = DashboardActions(database, settings)

@@ -81,7 +81,9 @@ def test_attach_cv_artifact_marks_application_ready_without_duplicate_rows(
             normalized_text=full_text,
             completeness=DescriptionCompleteness.FULL,
             content_hash="b" * 64,
-            fetched_at=datetime(2026, 7, 11, tzinfo=UTC),
+            # Keep this version deterministically newer than the seed helper's
+            # runtime timestamp so the test does not become date-sensitive.
+            fetched_at=datetime(2099, 7, 11, tzinfo=UTC),
         ))
     artifact = CVGenerationService(
         database, settings, _rules()

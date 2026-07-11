@@ -385,6 +385,10 @@ No legacy module is imported, and no file under `existing_projects/` is modified
 - Milestone 23: dashboard presentation helpers, Review Jobs form/table
   projection, Review Tray page, selected-job workflow state, action-center Job
   Detail rendering, focused dashboard action/presentation tests, and docs.
+- Milestone 24: dashboard-native CV review/copy/attachment actions, snippet-only
+  pasted-description fallback, local template-based cover-letter generation,
+  protected-fact AI cover-letter validation, local prep/application-pack
+  actions, focused tests, and `docs/COVER_LETTERS.md`. No migration was added.
 
 `docs/MIGRATION_PLAN.md` was updated to record milestone status and the approved product decisions.
 
@@ -428,7 +432,8 @@ python -m pytest
 - EnglishJobs full-description retrieval is intentionally conservative; many listings may remain snippet-only even when a clickout destination is known.
 - Bounded raw payload retention is intentionally not enabled; only parsed structured metadata and description text are stored.
 - Fit rules are deterministic but intentionally small and require calibration against reviewed vacancies.
-- CV generation supports FlowCV TXT only; DOCX/PDF and cover letters remain deferred.
+- CV and cover-letter generation produces local copy-friendly text; DOCX/PDF
+  generation and external submission remain deferred.
 - Real Telegram delivery remains disabled until credentials are rotated and explicit live mode is used.
 - Dashboard is local and single-user; no authentication or cloud deployment exists.
 - Real MySQL import is not required; the Milestone 9 boundary is fixture-first and read-only by design.

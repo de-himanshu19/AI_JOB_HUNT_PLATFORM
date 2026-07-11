@@ -135,6 +135,18 @@ not a commitment to implement future items automatically.
 - Mark Applied dashboard actions suggest a seven-day follow-up date and remain
   explicit local CRM updates only.
 
+### M24: Dashboard-Native CV And Cover Letter Workspace
+
+- Job Detail generates, displays, and attaches rule-based CV artifacts through
+  explicit dashboard actions; CV Workflow remains the artifact library.
+- Snippet-only jobs use a pasted full description for properly tailored CV
+  generation without changing the stored description.
+- Local, template-based cover-letter drafts are copy-friendly and never sent.
+- Optional AI polish saves only validated derivatives while preserving the
+  rule-based CV or cover letter.
+- Prep and application packs use local dashboard buttons rather than command
+  snippets in the daily user flow.
+
 ## Planned
 
 - Continue improving EnglishJobs full-description extraction where safe and

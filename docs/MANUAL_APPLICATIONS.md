@@ -68,14 +68,13 @@ provided. It does not validate an external portal and does not send anything.
 The dashboard daily flow is:
 
 ```text
-Review Jobs -> Review Tray -> Job Detail -> CV Workflow -> Applications
+Review Jobs -> Review Tray -> Job Detail -> CV/Cover Letter -> Apply manually -> Applications
 ```
 
 The Review Tray is backed by existing local application tracking and displayed
-as the working queue for jobs worth action. The Job Detail page shows exact CLI
-commands for creating a package and marking manual submission. It also offers
-explicit local-only buttons for package creation and Mark Applied; nothing runs
-on page load.
+as the working queue for jobs worth action. Job Detail offers explicit
+local-only buttons for CV, cover-letter, prep-pack, application-pack, and Mark
+Applied actions; nothing runs on page load and nothing is submitted externally.
 
 When marking a job applied from the dashboard, the default follow-up date is
 seven days from today. The status changes only after an explicit button click

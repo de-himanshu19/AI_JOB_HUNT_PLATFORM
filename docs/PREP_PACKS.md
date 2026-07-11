@@ -59,10 +59,10 @@ vacancy before applying.
 
 ## Dashboard
 
-The Job Detail page shows the exact CLI command for the selected job/profile
-and lists latest local prep-pack files when present. This dashboard section is
-read-only; it does not generate files on page load and does not perform live
-actions.
+The Job Detail page has an explicit **Create Prep Pack** button and lists latest
+local prep-pack files when present. It never generates files on page load. CLI
+commands remain available for advanced/operator workflows outside the normal
+dashboard flow.
 
 ## Review Before Use
 

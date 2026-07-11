@@ -69,6 +69,16 @@ Review Tray -> select job -> Open Job Detail
 The selected job carries into Job Detail and CV Workflow so the same job does
 not need to be searched repeatedly.
 
+In **Job Detail**, open **CV Actions** and click **Generate Rule-Based CV**.
+Review the generated text in place and copy it into FlowCV. AI polish is a
+separate, confirmed live action; validation failure preserves the rule-based
+text. For snippet-only jobs, paste the full description into the provided field
+and generate from that temporary input.
+
+Open **Cover Letter**, select a local template, and click **Generate Cover
+Letter**. Review and edit the local draft before copying it. Nothing is sent
+automatically.
+
 7. Optional CLI shortlist equivalent:
 
 ```powershell

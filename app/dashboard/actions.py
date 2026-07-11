@@ -17,6 +17,7 @@ from app.services.analysis_rules import AnalysisRules
 from app.services.application_pack import ApplicationPackService
 from app.services.applications import ALLOWED_TRANSITIONS, ApplicationService
 from app.services.communications import CommunicationDraftService
+from app.services.cover_letters import CoverLetterService
 from app.services.cv_generation import CVGenerationService
 from app.services.deduplication import DEDUPLICATION_VERSION, DeduplicationService
 from app.services.fit_analysis import FitAnalysisService
@@ -270,6 +271,7 @@ class DashboardActions:
         *,
         ai_polish: bool = False,
         live_ai_confirmed: bool = False,
+        force_regenerate: bool = False,
     ):
         provider = self._ai_provider(ai_polish, live_ai_confirmed)
         return CVGenerationService(
@@ -277,6 +279,7 @@ class DashboardActions:
         ).generate_for_job(
             job_id, profile_id,
             ai_polish=ai_polish, live_ai=live_ai_confirmed,
+            force_regenerate=force_regenerate,
         )
 
     def generate_manual_cv(
@@ -294,6 +297,56 @@ class DashboardActions:
             text, profile_id,
             ai_polish=ai_polish, live_ai=live_ai_confirmed,
         )
+
+    def polish_cv_artifact(
+        self,
+        artifact_id: UUID | str,
+        *,
+        live_ai_confirmed: bool,
+    ):
+        provider = self._ai_provider(True, live_ai_confirmed)
+        return CVGenerationService(
+            self.database, self.settings, self.rules, provider=provider
+        ).polish_artifact(artifact_id, live_ai=live_ai_confirmed)
+
+    def read_cv_artifact(self, artifact_id: UUID | str) -> dict[str, object]:
+        service = CVGenerationService(self.database, self.settings, self.rules)
+        artifact, _ = service.artifact_details(artifact_id)
+        return {
+            "artifact": artifact,
+            "text": service.read_artifact_text(artifact.id),
+            "evidence_text": service.read_artifact_text(artifact.id, evidence=True),
+        }
+
+    def generate_cover_letter(
+        self,
+        job_id: UUID | str,
+        profile_id: UUID | str,
+        *,
+        template_name: str | None = None,
+        manual_description: str | None = None,
+    ):
+        return self._cover_letters().generate(
+            job_id=job_id,
+            profile_id=profile_id,
+            template_name=template_name,
+            manual_description=manual_description,
+        )
+
+    def polish_cover_letter(
+        self,
+        artifact_id: str,
+        *,
+        live_ai_confirmed: bool,
+    ):
+        provider = self._ai_provider(True, live_ai_confirmed)
+        return self._cover_letters(provider=provider).polish(artifact_id)
+
+    def latest_cover_letter(self, profile_id: UUID | str, job_id: UUID | str):
+        return self._cover_letters().latest(profile_id, job_id)
+
+    def cover_letter_templates(self) -> tuple[str, ...]:
+        return self._cover_letters().templates()
 
     def notification_preview(
         self, profile_id: UUID | str, *, top_n: int | None = None
@@ -334,6 +387,14 @@ class DashboardActions:
             self.database,
             formatter=NotificationFormatter(self.settings.telegram_message_max_chars),
             client=client,
+        )
+
+    def _cover_letters(self, *, provider=None) -> CoverLetterService:
+        return CoverLetterService(
+            self.database,
+            output_dir=self.settings.data_dir / "cover_letters",
+            template_dir=self.settings.repo_root / "config" / "cover_letter_templates",
+            provider=provider,
         )
 
     def _require_live_telegram(self, confirmation: str) -> None:
